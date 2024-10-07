@@ -1,0 +1,7 @@
+Papers:
+
+Original: https://people.csail.mit.edu/rivest/pubs/SRA81.pdf
+
+Mental Poker in the age of Snarks: https://geometry.xyz/notebook/mental-poker-in-the-age-of-snarks-part-1
+
+Mental Poker Toolkit: https://vladris.com/mental-poker-toolkit/
