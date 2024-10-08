@@ -5,3 +5,15 @@ Original: https://people.csail.mit.edu/rivest/pubs/SRA81.pdf
 Mental Poker in the age of Snarks: https://geometry.xyz/notebook/mental-poker-in-the-age-of-snarks-part-1
 
 Mental Poker Toolkit: https://vladris.com/mental-poker-toolkit/
+
+Libraries:
+
+P2P Networking: https://docs.libp2p.io/guides/getting-started/go/
+
+---
+
+Might want to implement SRA as the commutative encryption algorithm... More research is required.
+
+Also need a data structure for holding the game state that will be the same for every client, a struct / append only list of moves?
+
+
