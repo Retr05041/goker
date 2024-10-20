@@ -17,3 +17,4 @@ Might want to implement SRA as the commutative encryption algorithm... More rese
 Also need a data structure for holding the game state that will be the same for every client, a struct / append only list of moves?
 
 
+Video explaining the crypto problem better: https://www.youtube.com/watch?v=mthPiiCS24A
