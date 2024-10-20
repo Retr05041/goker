@@ -19,7 +19,7 @@ func gcd(a, b *big.Int) *big.Int {
 	oldB := new(big.Int)
 	for b.Cmp(zero) != 0 {
 		oldB.Set(b)
-		b.Mod(a, b)
+		b.Set(new(big.Int).Mod(a, b))
 		a.Set(oldB)
 	}
 	return a
@@ -42,7 +42,7 @@ func modInverse(a, m *big.Int) (*big.Int, error) {
 		quotent := new(big.Int).Div(a, m)
 		t := new(big.Int).Set(m) // store m for this iteration
 
-		m = new(big.Int).Set(new(big.Int).Mod(a, m)) // m = a mod m
+		m.Set(new(big.Int).Mod(a, m)) // m = a mod m
 		a = t                                        // set previous value of m becomes a
 		t = new(big.Int).Set(y)                      // set the hold var to old y
 
@@ -61,11 +61,11 @@ func modInverse(a, m *big.Int) (*big.Int, error) {
 // Key generation - returns: private key, public key, modulus
 func GenerateKeys() (*big.Int, *big.Int, *big.Int, error) {
 	// generate p and q
-	p, err := generateLargePrime(512)
+	p, err := generateLargePrime(8)
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	q, err := generateLargePrime(512)
+	q, err := generateLargePrime(8)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -75,12 +75,18 @@ func GenerateKeys() (*big.Int, *big.Int, *big.Int, error) {
 
 	// Eulers Totient -- ϕ(n) = (p−1)(q−1)
 	// Used for caluclating private keys
-	phi := new(big.Int).Sub(new(big.Int).Sub(p, big.NewInt(1)), new(big.Int).Sub(q, big.NewInt(1)))
+	phi := new(big.Int).Mul(new(big.Int).Sub(p, big.NewInt(1)), new(big.Int).Sub(q, big.NewInt(1)))
 
-	// Choose e1 and e2 such that gcd(e1, phi(n)) = 1 and gcd(e2, phi(n)) = 1
-	e1 := big.NewInt(3)
-	for gcd(e1, phi).Cmp(big.NewInt(1)) != 0 {
-		e1 = new(big.Int).Set(e1.Add(e1, big.NewInt(2))) // Ensure e1 is odd
+	// Choose e1 such that gcd(e1, phi(n)) = 1
+	//e1 := big.NewInt(3)
+	//for gcd(e1, phi).Cmp(big.NewInt(1)) != 0 {
+	//	e1 = new(big.Int).Set(e1.Add(e1, big.NewInt(2))) // Ensure e1 is odd
+	//}
+
+	// Choose e such that gcd(e, phi(n)) = 1
+	e1 := big.NewInt(65537) // Common choice for e
+	if gcd(e1, phi).Cmp(big.NewInt(1)) != 0 {
+		return nil, nil, nil, fmt.Errorf("e is not coprime with phi")
 	}
 
 	d1, err := modInverse(e1, phi)
@@ -107,7 +113,11 @@ func stringToBigInt(str string) *big.Int {
 
 // Convert a base-256 big int to string for decrption
 func bigIntToString(num *big.Int) string {
-	result := ""
+	if num.Sign() == 0 {
+		return ""
+	}
+
+	var result []byte
 
 	// Create a big.Int for 256
 	base := big.NewInt(256)
@@ -115,21 +125,29 @@ func bigIntToString(num *big.Int) string {
 
 	for num.Cmp(big.NewInt(0)) > 0 {
 		// Divide num by 256 and get the remainder
-		remainder.Set(num.Mod(num, base))           // m = num % 256
-		result = string(remainder.Int64()) + result // Append character to result
-		num.Div(num, base)                          // n = num / 256
+		remainder.Set(num.Mod(num, base))                // m = num % 256
+		result = append(result, byte(remainder.Int64())) // Append character to result
+		num.Div(num, base)                               // n = num / 256
 	}
 
-	return result
+    // Reverse the byte slice before converting to string
+    for i, j := 0, len(result)-1; i < j; i, j = i+1, j-1 {
+        result[i], result[j] = result[j], result[i]
+    }
+
+    return string(result) // Convert byte slice to string
 }
 
 // Encryption
 func Encrypt(message string, publicKey, modN *big.Int) *big.Int {
 	numMsg := stringToBigInt(message)
+	fmt.Println("Numberfied message: " + numMsg.String())
 	return new(big.Int).Exp(numMsg, publicKey, modN) // ciphertext = numMsg^publicKey `mod` modN
 }
 
 // Decryption
 func Decrypt(cipherText, privateKey, modN *big.Int) string {
-	return bigIntToString(new(big.Int).Exp(cipherText, privateKey, modN)) // plaintext = ciphertext^privateKey `mod` modN
+	numMsg := new(big.Int).Exp(cipherText, privateKey, modN) // plaintext = ciphertext^privateKey `mod` modN
+	fmt.Println("Decrypted numberfied message: " + numMsg.String())
+	return bigIntToString(numMsg)
 }

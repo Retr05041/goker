@@ -32,34 +32,24 @@ func connect() {
 
 
 func cypherTest() {
-	// Generate keys
-	e1, d1, n1, err := crypto.GenerateKeys()
+	message := "hello"
+    fmt.Println("Original Message: ", message)
+
+	publicKey, privateKey, modN, err := crypto.GenerateKeys()
 	if err != nil {
-		fmt.Println("Error generating keys:", err)
-		return
+		fmt.Println(err)
 	}
-	fmt.Println("KEYS GENERATED")
+	fmt.Println("Keys generated")
 
-	// Original message
-	message := "Hello, World." 
+    cipherText := crypto.Encrypt(message, publicKey, modN)
+    fmt.Println("Ciphertext: ", cipherText.String())
 
-	// Encrypt message with e1 and e2
-	c1 := crypto.Encrypt(message, e1, n1)
-	fmt.Println("MESSAGE ENCRYPTED")
+    decryptedMessage := crypto.Decrypt(cipherText, privateKey, modN)
+    fmt.Println("Decrypted Result: ", decryptedMessage)
 
-	// Decrypt both results
-	decrypted1 := crypto.Decrypt(c1, d1, n1)
-	fmt.Println("MESSAGE DECRYPTED")
-
-	// Show results
-	fmt.Println("Original Message:", message)
-	fmt.Println("Ciphertext 1:", c1)
-	fmt.Println("Decrypted Result:", decrypted1)
-
-	// Check if the decrypted results match the original message
-	if decrypted1 == message {
-		fmt.Println("Decrypted Result 1 matches the original message.")
-	} else {
-		fmt.Println("Decrypted Result 1 does NOT match the original message.")
-	}
+    if decryptedMessage == message {
+        fmt.Println("Decrypted Result matches the original message.")
+    } else {
+        fmt.Println("Decrypted Result does NOT match the original message.")
+    }
 }
