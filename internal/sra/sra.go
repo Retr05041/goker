@@ -1,4 +1,4 @@
-package crypto
+package sra
 
 // SRA - RSA variant
 
@@ -9,7 +9,7 @@ import (
 )
 
 // Function to generate two large prime numbers
-func generateLargePrime(bits int) (*big.Int, error) {
+func GenerateLargePrime(bits int) (*big.Int, error) {
 	return rand.Prime(rand.Reader, bits)
 }
 
@@ -23,6 +23,46 @@ func gcd(a, b *big.Int) *big.Int {
 		a.Set(oldB)
 	}
 	return a
+}
+
+func bgcd(a, b *big.Int) *big.Int {
+    if a.Cmp(big.NewInt(0)) == 0 {
+        return b
+    }
+    if b.Cmp(big.NewInt(0)) == 0 {
+        return a
+    }
+
+    // Both a and b are not zero
+    // Count the number of common factors of 2
+    shift := 0
+    for (a.Bit(0) == 0) && (b.Bit(0) == 0) {
+        a.Rsh(a, 1)
+        b.Rsh(b, 1)
+        shift++
+    }
+
+    // Remove all factors of 2 from a
+    for a.Bit(0) == 0 {
+        a.Rsh(a, 1)
+    }
+
+    // Loop until b is zero
+    for b.Cmp(big.NewInt(0)) != 0 {
+        // Remove all factors of 2 from b
+        for b.Bit(0) == 0 {
+            b.Rsh(b, 1)
+        }
+        // Now a and b are both odd, subtract the smaller from the larger
+        if a.Cmp(b) >= 0 {
+            a.Sub(a, b)
+        } else {
+            b.Sub(b, a)
+        }
+    }
+
+    // Restore common factors of 2
+    return a.Lsh(a, uint(shift))
 }
 
 // Modular inverse of a modulo m - using Extended Euclidean Algorithm
@@ -59,17 +99,9 @@ func modInverse(a, m *big.Int) (*big.Int, error) {
 }
 
 // Key generation - returns: private key, public key, modulus
-func GenerateKeys() (*big.Int, *big.Int, *big.Int, error) {
-	// generate p and q
-	p, err := generateLargePrime(8)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	q, err := generateLargePrime(8)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
+// The given p and q are two large primes the players have agreed on - this will create keys that are commutative
+// Ensure no player has the same public key, so they won't have the same private key
+func GenerateKeys(publicKeys []*big.Int, p, q *big.Int) (*big.Int, *big.Int, *big.Int, error) {
 	// n = p * q
 	n := new(big.Int).Mul(p, q)
 
@@ -77,24 +109,33 @@ func GenerateKeys() (*big.Int, *big.Int, *big.Int, error) {
 	// Used for caluclating private keys
 	phi := new(big.Int).Mul(new(big.Int).Sub(p, big.NewInt(1)), new(big.Int).Sub(q, big.NewInt(1)))
 
+    var publicKey *big.Int
+
 	// Choose e1 such that gcd(e1, phi(n)) = 1
-	//e1 := big.NewInt(3)
-	//for gcd(e1, phi).Cmp(big.NewInt(1)) != 0 {
-	//	e1 = new(big.Int).Set(e1.Add(e1, big.NewInt(2))) // Ensure e1 is odd
-	//}
+    // If the e array is empty, find the first valid e 
+    if len(publicKeys) == 0 {
+		fmt.Println("Generateing a new random key!")
+        publicKey = big.NewInt(3)
+        for bgcd(publicKey, phi).Cmp(big.NewInt(1)) != 0 {
+            publicKey.Add(publicKey, big.NewInt(2)) // Ensure e is odd
+        }
+    } else {
+		fmt.Println("Key detected, generating starting from prior")
+		// If someone has already generated a public key, start from the last element in the publicKeys array (should be the largest so far)
+        lastPublicKey := publicKeys[len(publicKeys)-1]
+        publicKey = new(big.Int).Set(lastPublicKey)
+		
+		for bgcd(publicKey, phi).Cmp(big.NewInt(1)) != 0 {
+			publicKey.Add(publicKey, big.NewInt(2)) // Ensure e is odd
+		}
+    }
 
-	// Choose e such that gcd(e, phi(n)) = 1
-	e1 := big.NewInt(65537) // Common choice for e
-	if gcd(e1, phi).Cmp(big.NewInt(1)) != 0 {
-		return nil, nil, nil, fmt.Errorf("e is not coprime with phi")
-	}
-
-	d1, err := modInverse(e1, phi)
+	privateKey, err := modInverse(publicKey, phi)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
-	return e1, d1, n, nil
+	return publicKey, privateKey, n, nil
 }
 
 // Converts a string to a base-256 big int for encryption

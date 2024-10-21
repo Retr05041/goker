@@ -9,11 +9,11 @@ import (
 	"crypto/rsa"
 	"crypto/sha256"
 	"math/big"
+	"goker/internal/sra"
 )
 
 func main() {
-	cypherTest()
-	cypherTest2()
+	mycyphertest()
 }
 
 func connect() {
@@ -34,6 +34,72 @@ func connect() {
 	p2p.Init(sourcePort, dest)
 }
 
+func mycyphertest() {
+	// generate a shared p and q
+	p, err := sra.GenerateLargePrime(8)
+	if err != nil {
+		fmt.Println(err)
+	}
+	q, err := sra.GenerateLargePrime(8)
+	if err != nil {
+		fmt.Println(err)
+	}
+
+    // Array to hold public keys
+    var publicKeys []*big.Int
+
+	alicePublicKey, alicePrivateKey, aliceModN, err := sra.GenerateKeys(nil, p, q)
+	if err != nil {
+		fmt.Println(err)
+	}
+	fmt.Println("Alice's keys have been generated")
+
+	publicKeys = append(publicKeys, alicePublicKey)
+
+	bobPublicKey, bobPrivateKey, bobModN, err := sra.GenerateKeys(publicKeys, p, q)
+	if err != nil {
+		fmt.Println(err)
+	}
+	fmt.Println("Bob's keys have been generated")
+
+	// Example message
+	message := []byte("X")
+
+	// Step 2: Hash the message
+	hash := sha256.Sum256(message)
+
+	// Step 3: Encrypt the hash with Alice's public key
+	aliceCipher := new(big.Int).Exp(new(big.Int).SetBytes(hash[:]), alicePublicKey, aliceModN)
+
+	// Step 4: Encrypt the already encrypted hash with Bob's public key
+	bobCipher := new(big.Int).Exp(aliceCipher, bobPublicKey, bobModN)
+
+	// Step 5: Alice decrypts the message with her private key
+	aliceDecrypted := new(big.Int).Exp(bobCipher, alicePrivateKey, aliceModN)
+	
+	// Step 6: Bob decrypts the message with his private key
+	finalHash := new(big.Int).Exp(aliceDecrypted, bobPrivateKey, bobModN)
+
+	// Convert back to bytes
+	decryptedHash := finalHash.Bytes()
+
+	// Pad the decrypted hash to match the original hash size
+	expectedHash := make([]byte, sha256.Size)
+	copy(expectedHash[sha256.Size-len(decryptedHash):], decryptedHash)
+
+	// Verify that the decrypted hash matches the original hash
+	fmt.Printf("Orignal message: %s\n", message)
+	fmt.Printf("Original hash: %x\n", hash)
+	fmt.Println("---")
+	fmt.Printf("Alice encyrpts the hash: %x\n", aliceCipher)
+	fmt.Printf("Bob encyrpts Alice's hash: %x\n", bobCipher)
+	fmt.Println("---")
+	fmt.Printf("Alice's decrypts her hash: %x\n", aliceDecrypted)
+	fmt.Printf("Bob decrypts his hash: %x\n", expectedHash)
+	fmt.Println("---")
+	fmt.Printf("Message matches: %t\n", string(expectedHash) == string(hash[:]))
+}
+
 
 func cypherTest() {
 	// Step 1: Generate RSA keys for Alice and Bob
@@ -47,17 +113,16 @@ func cypherTest() {
 	hash := sha256.Sum256(message)
 
 	// Step 3: Encrypt the hash with Alice's public key
-	c1 := new(big.Int).Exp(new(big.Int).SetBytes(hash[:]), big.NewInt(int64(aliceKey.PublicKey.E)), aliceKey.PublicKey.N)
+	aliceCipher := new(big.Int).Exp(new(big.Int).SetBytes(hash[:]), big.NewInt(int64(aliceKey.PublicKey.E)), aliceKey.PublicKey.N)
 
 	// Step 4: Encrypt the already encrypted hash with Bob's public key
-	c2 := new(big.Int).Exp(c1, big.NewInt(int64(bobKey.PublicKey.E)), bobKey.PublicKey.N)
+	bobCipher := new(big.Int).Exp(aliceCipher, big.NewInt(int64(bobKey.PublicKey.E)), bobKey.PublicKey.N)
 
-	// Step 5: Bob decrypts the message with his private key
-	c1Prime := new(big.Int).Exp(c2, bobKey.D, bobKey.PublicKey.N)
-
-
-	// Step 6: Alice decrypts the message with her private key
-	finalHash := new(big.Int).Exp(c1Prime, aliceKey.D, aliceKey.PublicKey.N)
+	// Step 5: Alice decrypts the message with her private key
+	aliceDecrypted := new(big.Int).Exp(bobCipher, aliceKey.D, aliceKey.PublicKey.N)
+	
+	// Step 6: Bob decrypts the message with his private key
+	finalHash := new(big.Int).Exp(aliceDecrypted, bobKey.D, bobKey.PublicKey.N)
 
 	// Convert back to bytes
 	decryptedHash := finalHash.Bytes()
@@ -67,8 +132,59 @@ func cypherTest() {
 	copy(expectedHash[sha256.Size-len(decryptedHash):], decryptedHash)
 
 	// Verify that the decrypted hash matches the original hash
-	fmt.Printf("Original Hash: %x\n", hash)
-	fmt.Printf("Decrypted Hash: %x\n", expectedHash)
+	fmt.Printf("Orignal message: %s\n", message)
+	fmt.Printf("Original hash: %x\n", hash)
+	fmt.Println("---")
+	fmt.Printf("Alice encyrpts the hash: %x\n", aliceCipher)
+	fmt.Printf("Bob encyrpts Alice's hash: %x\n", bobCipher)
+	fmt.Println("---")
+	fmt.Printf("Alice's decrypts her hash: %x\n", aliceDecrypted)
+	fmt.Printf("Bob decrypts his hash: %x\n", expectedHash)
+	fmt.Println("---")
+	fmt.Printf("Message matches: %t\n", string(expectedHash) == string(hash[:]))
+}
+
+
+func cypherTest3() {
+	// Step 1: Generate RSA keys for Alice and Bob
+	aliceKey, _ := rsa.GenerateKey(rand.Reader, 2048)
+	bobKey, _ := rsa.GenerateKey(rand.Reader, 2048)
+
+	// Example message
+	message := []byte("Hello, Bob!")
+
+	// Step 2: Hash the message
+	hash := sha256.Sum256(message)
+
+	// Step 3: Encrypt the hash with Alice's public key
+	aliceCipher := new(big.Int).Exp(new(big.Int).SetBytes(hash[:]), big.NewInt(int64(aliceKey.PublicKey.E)), aliceKey.PublicKey.N)
+
+	// Step 4: Encrypt the already encrypted hash with Bob's public key
+	bobCipher := new(big.Int).Exp(aliceCipher, big.NewInt(int64(bobKey.PublicKey.E)), bobKey.PublicKey.N)
+
+	// Step 5: Bob decrypts the message with his private key
+	bobDecrypted := new(big.Int).Exp(bobCipher, bobKey.D, bobKey.PublicKey.N)
+	
+	// Step 6: Alice decrypts the message with her private key
+	finalHash := new(big.Int).Exp(bobDecrypted, aliceKey.D, aliceKey.PublicKey.N)
+
+	// Convert back to bytes
+	decryptedHash := finalHash.Bytes()
+
+	// Pad the decrypted hash to match the original hash size
+	expectedHash := make([]byte, sha256.Size)
+	copy(expectedHash[sha256.Size-len(decryptedHash):], decryptedHash)
+
+	// Verify that the decrypted hash matches the original hash
+	fmt.Printf("Orignal message: %s\n", message)
+	fmt.Printf("Original hash: %x\n", hash)
+	fmt.Println("---")
+	fmt.Printf("Alice encyrpts the hash: %x\n", aliceCipher)
+	fmt.Printf("Bob encyrpts Alice's hash: %x\n", bobCipher)
+	fmt.Println("---")
+	fmt.Printf("Bob decrypts his hash: %x\n", bobDecrypted)
+	fmt.Printf("Alice decrypts her hash: %x\n", expectedHash)
+	fmt.Println("---")
 	fmt.Printf("Message matches: %t\n", string(expectedHash) == string(hash[:]))
 }
 
