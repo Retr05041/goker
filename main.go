@@ -1,15 +1,16 @@
 package main
 
 import (
-	"fmt"
-	"goker/internal/p2p"
 	"crypto/sha256"
-	"math/big"
+	"fmt"
+	"goker/internal/gui"
+	"goker/internal/p2p"
 	"goker/internal/sra"
+	"math/big"
 )
 
 func main() {
-	connect()
+	gui.Init()
 }
 
 func connect() {
