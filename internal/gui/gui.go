@@ -11,17 +11,30 @@ func Init() {
 	myApp := app.New()
 	myWindow := myApp.NewWindow("Choice Widgets")
 
-	check := widget.NewCheck("Optional", func(value bool) {
-		log.Println("Check set to", value)
-	})
-	radio := widget.NewRadioGroup([]string{"Option 1", "Option 2"}, func(value string) {
-		log.Println("Radio set to", value)
-	})
-	combo := widget.NewSelect([]string{"Option 1", "Option 2"}, func(value string) {
-		log.Println("Select set to", value)
+
+	inputedAddress := widget.NewEntry()
+	inputedAddress.SetPlaceHolder("Host address...")
+	inputedAddress.Disable()
+	
+	var choice string
+	peerType := widget.NewRadioGroup([]string{"Host", "Connect"}, func(value string) {
+		if value == "Connect" {
+			inputedAddress.Enable()
+		} else {
+			inputedAddress.Disable()
+		}
+		choice = value
 	})
 
-	myWindow.SetContent(container.NewVBox(check, radio, combo))
+	submit := widget.NewButton("Submit", func() {
+		log.Println("Choice made: ", choice)
+		if choice == "Connect" {
+			log.Println("Address inputed: ", inputedAddress.Text)
+		}
+	})
+
+
+	myWindow.SetContent(container.NewVBox(peerType, inputedAddress, submit))
 	myWindow.Show()
 	myApp.Run()
 	tidyUp()
