@@ -4,17 +4,12 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"goker/internal/gui"
-	"goker/internal/p2p"
 	"goker/internal/sra"
 	"math/big"
 )
 
 func main() {
 	gui.Init()
-}
-
-func connect() {
-	p2p.Init()
 }
 
 func cyphertest() {

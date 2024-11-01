@@ -1,7 +1,9 @@
 package gui
 
 import (
+	"goker/internal/p2p"
 	"log"
+
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/widget"
@@ -29,7 +31,9 @@ func Init() {
 	submit := widget.NewButton("Submit", func() {
 		log.Println("Choice made: ", choice)
 		if choice == "Connect" {
-			log.Println("Address inputed: ", inputedAddress.Text)
+			p2p.Init(false, inputedAddress.Text)
+		} else if choice == "Host" {
+			p2p.Init(true, "")
 		}
 	})
 

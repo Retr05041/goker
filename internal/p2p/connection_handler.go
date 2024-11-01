@@ -3,7 +3,6 @@ package p2p
 import (
 	"strings"
 	"context"
-	"flag"
 	"fmt"
 	"log"
 	"sync"
@@ -30,12 +29,7 @@ type BootstrapServer struct {
 
 var server BootstrapServer
 
-func Init() {
-    // Define command-line flags
-	isHost := flag.Bool("host", false, "Host initial bootstrap server")
-    addrFlag := flag.String("addr", "", "Multiaddress of the peer to connect to (optional)")
-    flag.Parse()
-
+func Init(hosting bool, givenAddr string) {
     // Create a new libp2p Host
     h, err := libp2p.New()
     if err != nil {
@@ -58,14 +52,14 @@ func Init() {
 	// Reset console colour: 	\x1b[0m
 	fmt.Printf("Listening on specifc multiaddress (give this to other peers): \x1b[32m %s/p2p/%s \x1b[0m\n", h.Addrs()[0].String(), h.ID())
 
-    if *isHost {
+    if hosting {
         // Start as a bootstrap server
         fmt.Println("Running as bootstrap server...")
 		go alert()
-    } else if *addrFlag != "" {
+    } else if givenAddr != "" {
         // Connect to an existing bootstrap server
         fmt.Println("Joining bootstrap server...")
-        server.connectToBootstrapPeer(*addrFlag)
+        server.connectToBootstrapPeer(givenAddr)
 		go alert()
     }
 
