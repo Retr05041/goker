@@ -6,10 +6,41 @@ import (
 	"crypto/rand"
 	"fmt"
 	"math/big"
+	"crypto/sha256"
 )
 
+type Keyring struct {
+	sharedP, sharedQ *big.Int
+	globalPrivateKey, globalPublicKey, globalN *big.Int
+}
+
+// Set p & q to a randomly generated 2048 bit prime number.
+// Used for when a user hosts the game.
+func (k *Keyring) GeneratePQ() {
+	p, err := generateLargePrime(2048)
+	if err != nil {
+		fmt.Println(err)
+	}
+	q, err := generateLargePrime(2048)
+	if err != nil {
+		fmt.Println(err)
+	}
+	
+	k.sharedP = p
+	k.sharedQ = q
+}
+
+func (k *Keyring) GenerateGlobalKeys() {
+	privateKey, publicKey, modN, err := generateKeys(k.sharedP, k.sharedQ)
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	k.globalPrivateKey, k.globalPublicKey, k.globalN = privateKey, publicKey, modN
+}
+
 // Function to generate two large prime numbers
-func GenerateLargePrime(bits int) (*big.Int, error) {
+func generateLargePrime(bits int) (*big.Int, error) {
 	return rand.Prime(rand.Reader, bits)
 }
 
@@ -54,7 +85,7 @@ func modInverse(a, m *big.Int) (*big.Int, error) {
 
 // Key generation - returns: private key, public key, modulus
 // The given p and q are two large primes the players have agreed on - this will create keys that are commutative
-func GenerateKeys(p, q *big.Int) (*big.Int, *big.Int, *big.Int, error) {
+func generateKeys(p, q *big.Int) (*big.Int, *big.Int, *big.Int, error) {
 	// n = p * q
 	n := new(big.Int).Mul(p, q)
 
@@ -62,20 +93,20 @@ func GenerateKeys(p, q *big.Int) (*big.Int, *big.Int, *big.Int, error) {
 	// Used for caluclating private keys
 	phi := new(big.Int).Mul(new(big.Int).Sub(p, big.NewInt(1)), new(big.Int).Sub(q, big.NewInt(1)))
 
-	var publicKey *big.Int
+	var privateKey *big.Int
 
 	fmt.Println("Generating random keys")
-	publicKey, err := generateRandomCoPrime(phi)
+	privateKey, err := generateRandomCoPrime(phi)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
-	privateKey, err := modInverse(publicKey, phi)
+	publicKey, err := modInverse(privateKey, phi)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
-	return publicKey, privateKey, n, nil
+	return privateKey, publicKey, n, nil
 }
 
 // Generates a random number and checks if it is co-prime with x
@@ -96,12 +127,32 @@ func generateRandomCoPrime(x *big.Int) (*big.Int, error) {
 	}
 }
 
-// Encrypts message given the pubic key and modulus (n)
-func Encrypt(data, publicKey, modulus *big.Int) *big.Int {
-	return new(big.Int).Exp(data, publicKey, modulus)
+func hashMessage(message string) *big.Int {
+	hash := sha256.Sum256([]byte(message))
+	hashBigInt := new(big.Int).SetBytes(hash[:])
+	return hashBigInt
 }
 
-// Decrypts message given the pubic key and modulus (n)
-func Decrypt(data, privateKey, modulus *big.Int) *big.Int {
-	return new(big.Int).Exp(data, privateKey, modulus)
+// Encrypts message (hash) with the global keys inside the keyring.
+// Should check if keys exist before attempting
+func (k *Keyring) EncryptWithGlobalKeys(data *big.Int) *big.Int {
+	return new(big.Int).Exp(data, k.globalPublicKey, k.globalN)
+}
+
+// Decyrpts message (hash) with the global keys inside the keyring.
+// Should check if keys exist before attempting
+func (k *Keyring) DecryptWithGlobalKeys(data *big.Int) *big.Int {
+	return new(big.Int).Exp(data, k.globalPrivateKey, k.globalN)
+}
+
+// Use on hash after full decryption to pad it back to full and return it as a string
+func PadHash(hash *big.Int) string {
+	// Convert back to bytes
+	decryptedHash := hash.Bytes()
+
+	// Pad the decrypted hash to match the original hash size
+	expectedHash := make([]byte, sha256.Size)
+	copy(expectedHash[sha256.Size-len(decryptedHash):], decryptedHash)
+
+	return string(expectedHash)
 }
