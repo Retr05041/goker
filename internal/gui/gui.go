@@ -10,6 +10,8 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
+var server p2p.BootstrapServer
+
 func Init() {
 	myApp := app.New()
 	myWindow := myApp.NewWindow("Choice Widgets")
@@ -23,13 +25,16 @@ func Init() {
 	submit := widget.NewButton("Submit", func() {
 		log.Println("Choice made: ", choice)
 		if choice == "Connect" {
-			go p2p.Init(false, inputedAddress.Text)
+			server.Init(false, inputedAddress.Text)
+			thankLabel := widget.NewLabel("Thanks!")
+			myWindow.SetContent(container.NewCenter(thankLabel))
 		} else if choice == "Host" {
-			go p2p.Init(true, "")
+			server.Init(true, "")
+			copyAddrButton := widget.NewButton("Copy server address", func() {
+				myWindow.Clipboard().SetContent(server.HostMultiaddr)
+			})
+			myWindow.SetContent(copyAddrButton)
 		}
-
-		thanksLabel := widget.NewLabel("Thanks!")
-		myWindow.SetContent(container.NewCenter(thanksLabel))
 	})
 	submit.Disable()
 	
