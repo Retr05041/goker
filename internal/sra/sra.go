@@ -10,8 +10,14 @@ import (
 )
 
 type Keyring struct {
+	// Shared p and q for all clients to have commutative encryption
 	sharedP, sharedQ *big.Int
+
+	// Global keys (one set for encrypting every card)
 	globalPrivateKey, globalPublicKey, globalN *big.Int
+
+	// Time locking
+	encryptionIterations *big.Int
 }
 
 // Set p & q to a randomly generated 2048 bit prime number.
@@ -95,7 +101,6 @@ func generateKeys(p, q *big.Int) (*big.Int, *big.Int, *big.Int, error) {
 
 	var privateKey *big.Int
 
-	fmt.Println("Generating random keys")
 	privateKey, err := generateRandomCoPrime(phi)
 	if err != nil {
 		return nil, nil, nil, err
