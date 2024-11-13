@@ -21,3 +21,40 @@ Video explaining the crypto problem better: https://www.youtube.com/watch?v=mthP
 
 
 Commutative encryption: https://asecuritysite.com/rsa/comm2
+
+---
+
+encryption implementation steps
+
+1. 2 2048 bit primes 'p' and 'q' are generated (for RSA to be commutative these all need to be agreed on)
+2. Keys are generated:
+    a. Eulers Totient and 'n' are found: ET = (p-1)(q-1) && n = pq
+    b. A coprime number (private key) is found (randomly generate a 2048-bit number from 2-n, then check if greatest common divisor is 1)
+    c. Public key is the modular inverse of the private key - Extended Euclidean Algorithm
+
+time locked keys
+
+1. Calibration test is done doing 1 million sum squares, using a base of 2, and taking it to the power 2 mod (global mod n found when generating p and q)
+    a. This will attain the amount of squares per second
+2. Create time locked key
+    a. Multiply the num of squares per second with the specified amount of time you want the decryption to be (t)
+    b. calculate 'e' as '2^t mod φ(n)' where 'φ(n)' is the eulers totient
+    c. calculate 'b' as '2^e mod n' where n is the global mod n of the keys
+    d. Add the private key and b together, then mod it by global n
+3. Breaking the time locked key
+    a. Starts with base of 2, and t (for number of iterations to square)
+    b. Squares b t times, then subtracts b from the time locked private key
+    c. perform mod on new time locked private key with the global n
+
+
+Questions:
+
+1. Does my implementation of the encryption algorithm and time locked keys make sense?
+    a. If both parties have to know p and q, wouldn't a possible malicious attacker be able to decrypt the time locked key fast by just doing the same as the locking
+    mechanism?
+
+2. Which version of the mental poker protocol should I implement?
+    a. 1 global key per person for all cards? (4 players means 3 private keys per person to break throughout the whole game)
+    b. 1 global key -> 52 single keys (4 players means 11 private keys per person to break given dropout on river card)
+    c. Possible third?
+    d. Blockchain usefullness?
