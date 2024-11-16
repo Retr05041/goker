@@ -107,7 +107,7 @@ func (s *BootstrapServer) alert() {
 	}
 }
 
-// Handle incoming peer connections.
+// Handle incoming streams
 // If it's a new host in the network, assume it's waiting for the peer list. Else, Assume it's a command
 func (s *BootstrapServer) handleStream(stream network.Stream) {
 	defer stream.Close()
@@ -128,8 +128,8 @@ func (s *BootstrapServer) handleStream(stream network.Stream) {
 	switch message {
 	case "CMDping":
 		fmt.Println("Received ping command")
-		s.ExecuteCommand(&PingResponse{})
-	case "CMDgetpeers":
+		s.RespondToCommand(&PingCommand{}, stream)
+	case "CMDgetpeers": // Send peerlist to just this stream
 		fmt.Println("Recieved peer list request")
 		peerList := s.getPeerList()
 		_, err := stream.Write([]byte(peerList)) // Ensure the response is newline-terminated
