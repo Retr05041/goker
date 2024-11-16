@@ -9,6 +9,7 @@ Mental Poker Toolkit: https://vladris.com/mental-poker-toolkit/
 Libraries:
 
 P2P Networking: https://docs.libp2p.io/guides/getting-started/go/
+Command pattern: https://refactoring.guru/design-patterns/command/go/example
 
 ---
 
@@ -22,15 +23,78 @@ Video explaining the crypto problem better: https://www.youtube.com/watch?v=mthP
 
 Commutative encryption: https://asecuritysite.com/rsa/comm2
 
+A Multiparty Homomorphic Encryption Library in Go: https://homomorphicencryption.org/wp-content/uploads/2020/12/wahc20_demo_christian.pdf
+
+Possible zero knowledge proof library: https://pkg.go.dev/github.com/0xdecaf/zkrp#readme-bulletproofs-example
+
+Tims suggestions:
+
+for if I need multiple keys
+multi keys are straight forward : blinding factor - Multiply by r... do operations... then easily retroactively figure out what value I will need to divide by to get
+my value back... - STRAIGHT FORWARD TO MAKE VARIATIONS
+
+m^e = c is cipher txt
+C^d = m^ed = m
+
+m^e * r = c (new cipher text)
+c^d = m^ed * r^d = m * r^d
+
+r^-d (no division needed)
+
+it's a trick (any keypar, moduolate it to make it "unique" all you need to do is come up with a unique value)
+
+I NEED TO DO THIS - ONE KEY VALUE PAIR FOR EACH CARD - but each is a "variation" of the global key
+
+shuffle + apply keys * each person
+
+keep order of the deck forever (52 keys which are variations) - key index 0 is card index 0
+
+apply encryption to every card - take away old non variation keyset - NO ONE SHUFFLES DURING THIS STAGE
+
+if I take a card I simply announce it and everyone gives me the key materials to decrypt the card
+
+Time locking should reveal the key that I am using...? What is in the timelock? - fiven a "pair" of things
+given e and R^-d ? it doesnt matter, because it can be represented as a bit string, if it's too small use padding
+Have an intermediate step c0 -> x0 -> t0 
+x is a symmetrically encrypted cipher text (smaller 200 bits or smth like that) - will be long key, give that resulting cipher text, that smaller key can be time locked
+x would hold all the information to break the card (not the actual key for the card itself) - don't have to worry about size anymore..
+
+52 symmetrically encryption using key K - key k will get time locked and sent to everyone - as we should only break it post game anyway!!!
+
+Protocol problems:
+
+after a hand is over, people need to reviel their key K (time locked secret) and give the neccessary information that it was k that was time locked and that k can decrytp
+symmetric ones and taht the symmetric ones did indeed contain the material to decrypt the cards (the global key variations) - BECAUSE SOMEONE COULD LIE THEN NO ONE CAN EVER
+SEE THE ORIGNAL CARD - if it is revealed afterwords, people can verify if it made sense (if yes then all good, if no then a person attempted to cheat - invalid hand)
+not a zero knowldge proof - but could definitly be used prior if I want a high mark lol
+
+Verification is important
+
+K is symmetric - time locked - will have decryption key for C and 
+
+encrypt deck with SRA - every card will have a sequence of keys associated to it
+if to a person everyone will publish their value but the one needing it
+
+any face up card needs all
+
+every individual will also publish a ciphertext which will a table of private keys for each card (k) - after the hand you have to publish all info for k so others can verify
+
+For P, Q, and PHI - do some digging (Tim might do some research, there is an "elegant trick" to it)
+
 ---
 
 encryption implementation steps
 
-1. 2 2048 bit primes 'p' and 'q' are generated (for RSA to be commutative these all need to be agreed on)
+1. 2 2048 bit primes 'p' and 'q' are generated (sharing these would be catastrophic to security... what are other ways of sharing mod n and PHI without comprimising security?)
 2. Keys are generated:
     a. Eulers Totient and 'n' are found: ET = (p-1)(q-1) && n = pq
     b. A coprime number (private key) is found (randomly generate a 2048-bit number from 2-n, then check if greatest common divisor is 1)
     c. Public key is the modular inverse of the private key - Extended Euclidean Algorithm
+
+The coprime number can be either public or private key, either way knowing the public key and PHI would result in the ability to calculate the other (INSECURE)
+
+Should I use Secure Multi-Party Computation to have all users generate an N? - Still have a problem with PHI then as no one would know p and q
+Unless I wanted to go off of finding a co-prime with high probability but not certainty...
 
 time locked keys
 
@@ -43,7 +107,7 @@ time locked keys
     d. Add the private key and b together, then mod it by global n
 3. Breaking the time locked key
     a. Starts with base of 2, and t (for number of iterations to square)
-    b. Squares b t times, then subtracts b from the time locked private key
+    b. Squares base t times, then subtracts b from the time locked private key
     c. perform mod on new time locked private key with the global n
 
 

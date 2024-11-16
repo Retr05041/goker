@@ -1,10 +1,8 @@
 package main
 
-import (
-	"goker/internal/sra"
-)
+import "goker/internal/gui"
 
 func main() {
-	sra.TestTimeLockPuzzle()
+	gui.Init()
 }
 

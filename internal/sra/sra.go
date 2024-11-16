@@ -10,8 +10,7 @@ import (
 )
 
 type Keyring struct {
-	// Shared p and q for all clients to have commutative encryption
-	sharedP, sharedQ *big.Int
+	sharedP, sharedQ *big.Int // DO NOT SHARE THESE. or PHI for that matter - others will be able to derive private keys from others if you do 
 
 	// Global keys (one set for encrypting every card)
 	globalPrivateKey, globalPublicKey, globalN *big.Int
@@ -99,14 +98,14 @@ func generateKeys(p, q *big.Int) (*big.Int, *big.Int, *big.Int, error) {
 	// Used for caluclating private keys
 	phi := new(big.Int).Mul(new(big.Int).Sub(p, big.NewInt(1)), new(big.Int).Sub(q, big.NewInt(1)))
 
-	var privateKey *big.Int
+	var publicKey *big.Int
 
-	privateKey, err := generateRandomCoPrime(phi)
+	publicKey, err := generateRandomCoPrime(phi)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
-	publicKey, err := modInverse(privateKey, phi)
+	privateKey, err := modInverse(publicKey, phi)
 	if err != nil {
 		return nil, nil, nil, err
 	}

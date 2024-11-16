@@ -2,7 +2,7 @@ package gui
 
 import (
 	"goker/internal/p2p"
-	"log"
+	"fmt"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
@@ -23,17 +23,13 @@ func Init() {
 	inputedAddress.Disable()
 
 	submit := widget.NewButton("Submit", func() {
-		log.Println("Choice made: ", choice)
+		fmt.Println("Choice made: ", choice)
 		if choice == "Connect" {
-			server.Init(false, inputedAddress.Text)
-			thankLabel := widget.NewLabel("Thanks!")
-			myWindow.SetContent(container.NewCenter(thankLabel))
+			go server.Init(false, inputedAddress.Text)
+			showConnectedUI(myWindow)
 		} else if choice == "Host" {
-			server.Init(true, "")
-			copyAddrButton := widget.NewButton("Copy server address", func() {
-				myWindow.Clipboard().SetContent(server.HostMultiaddr)
-			})
-			myWindow.SetContent(copyAddrButton)
+			go server.Init(true, "")
+			showHostUI(myWindow)
 		}
 	})
 	submit.Disable()
@@ -50,15 +46,33 @@ func Init() {
 
 
 	menuContent := container.NewGridWrap(fyne.NewSize(300, 200), container.NewVBox(peerType, inputedAddress, submit))
-
-
 	myWindow.SetContent(container.NewCenter(menuContent))
 	myWindow.Show()
 	myApp.Run()
 	tidyUp()
 }
 
+func showHostUI(myWindow fyne.Window) {
+	copyAddrButton := widget.NewButton("Copy server address", func() {
+		myWindow.Clipboard().SetContent(server.HostMultiaddr)
+	})
+	pingButton := widget.NewButton("Ping All Peers", func() {
+		server.ExecuteCommand(&p2p.PingCommand{})
+		fmt.Println("Ping command sent to all peers.")
+	})
+	myWindow.SetContent(container.NewVBox(copyAddrButton, pingButton))
+}
+
+func showConnectedUI(myWindow fyne.Window) {
+	thankLabel := widget.NewLabel("Connected to Host!")
+	pingButton := widget.NewButton("Ping All Peers", func() {
+		server.ExecuteCommand(&p2p.PingCommand{})
+		fmt.Println("Ping command sent to all peers.")
+	})
+	myWindow.SetContent(container.NewVBox(thankLabel, pingButton))
+}
+
 
 func tidyUp() {
-	log.Println("Exited")
+	fmt.Println("Exited")
 }
