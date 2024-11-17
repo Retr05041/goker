@@ -60,7 +60,11 @@ func showHostUI(myWindow fyne.Window) {
 		server.ExecuteCommand(&p2p.PingCommand{})
 		fmt.Println("Ping command sent to all peers.")
 	})
-	myWindow.SetContent(container.NewVBox(copyAddrButton, pingButton))
+	testEncryptionButton := widget.NewButton("Test Commutative Encryption", func() {
+		server.ExecuteCommand(&p2p.TestEncryptionCommand{Message: "Hello, World."})
+		fmt.Println("Testing encryption done on all peers.")
+	})
+	myWindow.SetContent(container.NewVBox(copyAddrButton, pingButton, testEncryptionButton))
 }
 
 func showConnectedUI(myWindow fyne.Window) {
@@ -71,7 +75,7 @@ func showConnectedUI(myWindow fyne.Window) {
 	})
 	requestPQButton := widget.NewButton("Request P & Q", func() {
 		server.ExecuteCommand(&p2p.PQRequestCommand{})
-		fmt.Println("Requesting P&Q sent to all peers.")
+		fmt.Println("Requested P&Q from host.")
 	})
 	myWindow.SetContent(container.NewVBox(thankLabel, pingButton, requestPQButton))
 }

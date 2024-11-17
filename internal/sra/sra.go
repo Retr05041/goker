@@ -131,7 +131,7 @@ func generateRandomCoPrime(x *big.Int) (*big.Int, error) {
 	}
 }
 
-func hashMessage(message string) *big.Int {
+func HashMessage(message string) *big.Int {
 	hash := sha256.Sum256([]byte(message))
 	hashBigInt := new(big.Int).SetBytes(hash[:])
 	return hashBigInt

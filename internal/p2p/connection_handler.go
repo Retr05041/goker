@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"math/big"
 
 	libp2p "github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/host"
@@ -133,8 +134,16 @@ func (s *BootstrapServer) handleStream(stream network.Stream) {
 	}
 	message = strings.TrimSpace(message)
 
+	// Split the command and the payload
+	parts := strings.SplitN(message, " ", 2)
+	command := parts[0]
+	var payload string
+	if len(parts) > 1 {
+		payload = parts[1]
+	} 
+
 	// Process the command based on the message
-	switch message {
+	switch command {
 	case "CMDping":
 		fmt.Println("Received ping command")
 		s.RespondToCommand(&PingCommand{}, stream)
@@ -148,6 +157,18 @@ func (s *BootstrapServer) handleStream(stream network.Stream) {
 	case "CMDpqrequest":
 		fmt.Println("Recieved PQ Request")
 		s.RespondToCommand(&PQRequestCommand{}, stream)
+	case "CMDencrypt":
+		fmt.Println("Recieved Encryption Request on a payload")
+		messageBig := new(big.Int)
+		messageBig.SetString(payload, 10)
+		encryptedMessage := s.keyring.EncryptWithGlobalKeys(messageBig)
+		stream.Write([]byte(encryptedMessage.String() + "\n"))
+	case "CMDdecrypt":
+		fmt.Println("Recieved Decryption Request on a payload")
+		messageBig := new(big.Int)
+		messageBig.SetString(payload, 10)
+		decryptedMessage := s.keyring.DecryptWithGlobalKeys(messageBig)
+		stream.Write([]byte(decryptedMessage.String() + "\n"))
 	default:
 		log.Printf("Unknown Response Recieved: %s\n", message)
 	}
