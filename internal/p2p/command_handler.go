@@ -4,8 +4,9 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"strings"
+	"io"
 	"log"
+	"strings"
 
 	"github.com/libp2p/go-libp2p/core/network"
 )
@@ -72,5 +73,46 @@ func (p *PingCommand) Respond(server *BootstrapServer, sendingStream network.Str
 		log.Printf("PingResponse: Failed to send ping to peer %s: %v", sendingStream.Conn().RemotePeer(), err)
 	} else {
 		fmt.Printf("PingResponse: Sent pong to peer %s", sendingStream.Conn().RemotePeer())
+	}
+}
+
+// Request the shared P and Q every peer should have in the network - all peers will request this from the host each round
+type PQRequestCommand struct{}
+func (pq *PQRequestCommand) Execute(server *BootstrapServer) {
+	// Create a new stream to the peer
+	stream, err := server.host.NewStream(context.Background(), server.sessionHost, protocolID)
+	if err != nil {
+		log.Printf("PQRequest: Failed to create stream to host %s: %v\n", server.sessionHost, err)
+		return
+	}
+	defer stream.Close()
+
+	_, err = stream.Write([]byte("CMDpqrequest\n"))
+	if err != nil {
+		log.Printf("PQRequest: Failed to send command to host %s: %v\n", server.sessionHost, err)
+	} else {
+		fmt.Printf("PQRequest: Sent command to host %s\n", server.sessionHost)
+	}
+
+	// Read the response - we do this as they won't be sending an actual *command* back, just some text
+	responseBytes, err := io.ReadAll(stream)
+	if err != nil {
+		log.Printf("PQRequest: Failed to read response from host %s: %v\n", server.sessionHost, err)
+	} else {
+		pq := strings.Split(string(responseBytes), "\n")
+		fmt.Printf("PQRequest: Received response from host: %s P: %s -- Q: %s\n", server.sessionHost, pq[0], pq[1])
+		server.keyring.SetPQ(pq[0], pq[1]) // Set this servers p and q
+		server.keyring.GenerateGlobalKeys()
+	}
+}
+
+// Called on a 'CMDpqrequest' command call
+func (pq *PQRequestCommand) Respond(server *BootstrapServer, sendingStream network.Stream) {
+	PQData := server.keyring.GetPQString()
+	_, err := sendingStream.Write([]byte(PQData))
+	if err != nil {
+		log.Printf("PQRequestResponse: Failed to send PQ to peer %s: %v", sendingStream.Conn().RemotePeer(), err)
+	} else {
+		fmt.Printf("PQRequestResponse: Sent PQ to peer %s", sendingStream.Conn().RemotePeer())
 	}
 }

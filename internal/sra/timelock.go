@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// Time locking functions for private keys - Uses a 2^2^t mod n
+// Time locking functions for private keys - Uses a 2^2^t mod n - Need to change this to be symmetric encrypted...?
 
 // GenerateTimeLockedPrivateKey locks the global private key with a time-lock puzzle.
 func (k *Keyring) GenerateTimeLockedPrivateKey(T int64) error {

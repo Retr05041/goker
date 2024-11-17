@@ -69,7 +69,11 @@ func showConnectedUI(myWindow fyne.Window) {
 		server.ExecuteCommand(&p2p.PingCommand{})
 		fmt.Println("Ping command sent to all peers.")
 	})
-	myWindow.SetContent(container.NewVBox(thankLabel, pingButton))
+	requestPQButton := widget.NewButton("Request P & Q", func() {
+		server.ExecuteCommand(&p2p.PQRequestCommand{})
+		fmt.Println("Requesting P&Q sent to all peers.")
+	})
+	myWindow.SetContent(container.NewVBox(thankLabel, pingButton, requestPQButton))
 }
 
 

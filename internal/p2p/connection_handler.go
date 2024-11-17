@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"goker/internal/sra"
+	"io"
 	"log"
 	"strings"
 	"sync"
@@ -21,10 +23,14 @@ import (
 var protocolID = protocol.ID("/goker/1.0.0")
 
 type BootstrapServer struct {
-	host          host.Host
-	peers         map[peer.ID]multiaddr.Multiaddr
-	mutex         sync.Mutex
-	HostMultiaddr string
+	host          host.Host // This host
+	HostMultiaddr string // This hosts multiaddress
+
+	peers         map[peer.ID]multiaddr.Multiaddr // A map for managing peer connections
+	mutex         sync.Mutex // Mutex for accessing peer map
+
+	keyring sra.Keyring // Keyring for handling encryption
+	sessionHost peer.ID // Host of the current network (This will change has hosts drop out, but will be used to request specific things)
 }
 
 func (s *BootstrapServer) Init(hosting bool, givenAddr string) {
@@ -53,7 +59,10 @@ func (s *BootstrapServer) Init(hosting bool, givenAddr string) {
 
 	if hosting {
 		// Start as a bootstrap server
-		fmt.Println("Running as a host...")
+		fmt.Println("Running as a host... setting up initial keyring")
+		s.keyring.GeneratePQ()
+		s.keyring.GenerateGlobalKeys()
+		fmt.Println("Done, reading for peers!")
 		//go s.alert()
 	} else if givenAddr != "" {
 		// Connect to an existing bootstrap server
@@ -136,6 +145,9 @@ func (s *BootstrapServer) handleStream(stream network.Stream) {
 		if err != nil {
 			log.Printf("Failed to send peer list: %v", err)
 		}
+	case "CMDpqrequest":
+		fmt.Println("Recieved PQ Request")
+		s.RespondToCommand(&PQRequestCommand{}, stream)
 	default:
 		log.Printf("Unknown Response Recieved: %s\n", message)
 	}
@@ -166,6 +178,7 @@ func (s *BootstrapServer) connectToHost(peerAddr string) {
 
 	fmt.Printf("Connected to host: %s\n", pinfo.ID)
 	s.addPeer(pinfo.ID, pinfo.Addrs[0]) // Add host peer to peer list
+	s.sessionHost = pinfo.ID // Set this nodes session host to the bootstrapping host it connected to
 
 	// Create stream with host to call the initial 'CMDgetpeers' command
 	stream, err := s.host.NewStream(ctx, pinfo.ID, protocolID)
@@ -181,8 +194,7 @@ func (s *BootstrapServer) connectToHost(peerAddr string) {
 	}
 
 	// Read the peer list sent by the host
-	reader := bufio.NewReader(stream)
-	peerList, err := reader.ReadString('\n')
+	peerListBytes, err := io.ReadAll(stream)
 	if err != nil {
 		log.Fatalf("Failed to read peer list: %v", err)
 	}
@@ -190,7 +202,7 @@ func (s *BootstrapServer) connectToHost(peerAddr string) {
 	fmt.Println("Received peer list.")
 
 	// Set the peer list and connect to all peers
-	s.setPeerList(peerList)
+	s.setPeerList(string(peerListBytes))
 }
 
 

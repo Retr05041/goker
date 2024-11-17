@@ -160,3 +160,16 @@ func PadHash(hash *big.Int) string {
 
 	return string(expectedHash)
 }
+
+// Returns P&Q as a string - meant for being sent over a stream for a PQRequest
+func (k *Keyring) GetPQString() string {
+	return fmt.Sprintf("%s\n%s\n", k.sharedP, k.sharedQ)
+}
+
+// Set p and q
+func (k *Keyring) SetPQ(p string, q string) {
+	k.sharedP = new(big.Int)
+	k.sharedQ = new(big.Int)
+	k.sharedP.SetString(p, 10)
+	k.sharedQ.SetString(q, 10)
+}
