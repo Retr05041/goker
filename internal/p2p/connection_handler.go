@@ -201,7 +201,7 @@ func (s *BootstrapServer) connectToHost(peerAddr string) {
 	s.addPeer(pinfo.ID, pinfo.Addrs[0]) // Add host peer to peer list
 	s.sessionHost = pinfo.ID // Set this nodes session host to the bootstrapping host it connected to
 
-	// Create stream with host to call the initial 'CMDgetpeers' command
+	// Create stream with host to call the initial 'CMDgetpeers' and 'CMDpqrequest' commands
 	stream, err := s.host.NewStream(ctx, pinfo.ID, protocolID)
 	if err != nil {
 		log.Fatalf("Failed to create stream: %v", err)
@@ -220,10 +220,12 @@ func (s *BootstrapServer) connectToHost(peerAddr string) {
 		log.Fatalf("Failed to read peer list: %v", err)
 	}
 
-	fmt.Println("Received peer list.")
-
 	// Set the peer list and connect to all peers
 	s.setPeerList(string(peerListBytes))
+	fmt.Println("Received and set peerlist.")
+
+	// Request P & Q upon successful connection and integration with the network
+	s.ExecuteCommand(&PQRequestCommand{})	
 }
 
 
