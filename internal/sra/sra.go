@@ -16,7 +16,8 @@ type Keyring struct {
 	globalPrivateKey, globalPublicKey, globalN *big.Int
 
 	// Time locking
-	encryptionIterations *big.Int
+	puzzle *TimeLock	
+
 }
 
 // Set p & q to a randomly generated 2048 bit prime number.
