@@ -122,3 +122,18 @@ Questions:
     b. 1 global key -> 52 single keys (4 players means 11 private keys per person to break given dropout on river card)
     c. Possible third?
     d. Blockchain usefullness?
+
+---
+
+More papers on commutative encryption SRA:
+Using Commutative Encryption to Share a Secret - https://eprint.iacr.org/2008/356.pdf
+- Talks about using DLP (discrete logarithm problem) which is what I am using
+
+
+Lot's of juice material on Time locked puzzles:
+Versatile and Sustainable Timed-Release Encryption and Sequential Time-Lock Puzzles - https://eprint.iacr.org/2020/739.pdf
+- References good uses of TLP, and papers around it
+
+
+OG paper on Time-lock puzzles: https://people.csail.mit.edu/rivest/pubs/RSW96.pdf
+
