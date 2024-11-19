@@ -62,7 +62,6 @@ func (k *Keyring) GenerateTimeLockedPuzzle(payload *big.Int, seconds int64) *Tim
 // DecryptTimeLockedPrivateKey unlocks the time-locked private key by performing
 // `t` sequential squaring operations.
 func (k *Keyring) BreakTimeLockedPuzzle(payload *big.Int, decryptionIterations *big.Int, n *big.Int) *big.Int {
-	answer := new(big.Int)
 	// Step 1: Set base
 	base := big.NewInt(2)
 
@@ -72,7 +71,7 @@ func (k *Keyring) BreakTimeLockedPuzzle(payload *big.Int, decryptionIterations *
 	}
 
 	// Step 3: Subtract `b` from the time locked puzzle to retrieve the private key
-	answer.Sub(payload, base)
+	answer := new(big.Int).Sub(payload, base)
 	answer.Mod(answer, n) 
 
 	return answer
