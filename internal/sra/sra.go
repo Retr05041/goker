@@ -16,8 +16,7 @@ type Keyring struct {
 	globalPrivateKey, globalPublicKey, globalN, globalPHI *big.Int
 
     // Variations of the global keys
-    publicKeyVariations  []*big.Int
-    privateKeyVariations []*big.Int
+    keyVariations []*KeyVariation
 
 	// Time locking
 	puzzle *TimeLock	
