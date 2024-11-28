@@ -8,16 +8,17 @@ import (
 
 
 type TimeLock struct {
-	lockedPuzzle *big.Int
+	lockedPuzzle *big.Int // Shared
 
-	encryptionIterations *big.Int
-	n *big.Int
-	phi *big.Int
+	encryptionIterations *big.Int // Shared
+	n *big.Int // Shared
+	phi *big.Int // SHARED ONLY FOR SPEED OF BREAKING
 }
 
 // Time locking functions for private keys - Uses a 2^2^t mod n - Need to change this to be symmetric encrypted...?
 
-// GenerateTimeLockedPrivateKey locks the global private key with a time-lock puzzle.
+// GenerateTimeLockedPrivateKey locks a big int for a specified amount of time
+// In this context, it should be used on the symmetric key that locks all xn's (which hold the details for the variations of the global keyring)
 func (k *Keyring) GenerateTimeLockedPuzzle(payload *big.Int, seconds int64) *TimeLock {
 	timelock := new(TimeLock)
 
@@ -113,7 +114,7 @@ func TestTimeLockPuzzle() {
 	keyring.GeneratePQ()
 
 	// Generate global keys (public and private)
-	keyring.GenerateGlobalKeys()
+	keyring.GenerateKeys()
 
 	// Encrypt the private key with the time-lock puzzle
 	fmt.Printf("Encrypting the private key with a time-lock puzzle for %d seconds...\n", T)
