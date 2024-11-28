@@ -97,3 +97,9 @@ Versatile and Sustainable Timed-Release Encryption and Sequential Time-Lock Puzz
 
 OG paper on Time-lock puzzles: https://people.csail.mit.edu/rivest/pubs/RSW96.pdf
 
+---
+
+My idea for key time locked:
+bundle global private and public key and all r's (variation numbers) into a payload, encrypt with a symmetric key, and time lock that key
+send puzzle (key) and payload (encrypted with AES) to peer
+once broken, they can construct all variations and decrypt the cards

@@ -20,6 +20,7 @@ type Keyring struct {
 
 	// Time locking
 	puzzle *TimeLock	
+	KeyringPayload string
 }
 
 // Set p & q to a randomly generated 2048 bit prime number.

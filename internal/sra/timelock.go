@@ -8,10 +8,12 @@ import (
 
 
 type TimeLock struct {
-	lockedPuzzle *big.Int // Shared
-
+	lockedPuzzle *big.Int // Shared puzzle of key
+	payload string  // Base64 encrypted payload string
+	
 	encryptionIterations *big.Int // Shared
 	n *big.Int // Shared
+
 	phi *big.Int // SHARED ONLY FOR SPEED OF BREAKING
 }
 
@@ -19,8 +21,14 @@ type TimeLock struct {
 
 // GenerateTimeLockedPrivateKey locks a big int for a specified amount of time
 // In this context, it should be used on the symmetric key that locks all xn's (which hold the details for the variations of the global keyring)
-func (k *Keyring) GenerateTimeLockedPuzzle(payload *big.Int, seconds int64) *TimeLock {
+func (k *Keyring) GenerateTimeLockedPuzzle(payload string, seconds int64) *TimeLock {
 	timelock := new(TimeLock)
+	
+	// Encrypt Payload with AES to lock key
+	encryptedPayload, key, err := PayloadToAES(payload)
+	if err != nil {
+		fmt.Println(err)
+	}
 
 	// P&Q - will be burned
 	p, err := generateLargePrime(2048)
@@ -53,16 +61,17 @@ func (k *Keyring) GenerateTimeLockedPuzzle(payload *big.Int, seconds int64) *Tim
 	b := new(big.Int).Exp(a, e, timelock.n)
 
 	// Step 5: Encrypt the global private key with `b`
-	timelock.lockedPuzzle = new(big.Int).Add(payload, b)
+	timelock.lockedPuzzle = new(big.Int).Add(key, b)
 	timelock.lockedPuzzle.Mod(timelock.lockedPuzzle, timelock.n)
 
 
+	timelock.payload = encryptedPayload
 	return timelock
 }
 
-// DecryptTimeLockedPrivateKey unlocks the time-locked private key by performing
+// Unlocks the time-locked key by performing
 // `t` sequential squaring operations.
-func (k *Keyring) BreakTimeLockedPuzzle(payload *big.Int, decryptionIterations *big.Int, n *big.Int) *big.Int {
+func (k *Keyring) BreakTimeLockedPuzzle(puzzle *big.Int, encryptedPayload string, decryptionIterations *big.Int, n *big.Int) string {
 	// Step 1: Set base
 	base := big.NewInt(2)
 
@@ -72,10 +81,15 @@ func (k *Keyring) BreakTimeLockedPuzzle(payload *big.Int, decryptionIterations *
 	}
 
 	// Step 3: Subtract `b` from the time locked puzzle to retrieve the private key
-	answer := new(big.Int).Sub(payload, base)
-	answer.Mod(answer, n) 
+	key := new(big.Int).Sub(puzzle, base)
+	key.Mod(key, n) 
 
-	return answer
+
+	plaintextPayload, err := AESToPayload(encryptedPayload, key)
+	if err != nil {
+		fmt.Println(err)
+	}
+	return plaintextPayload
 }
 
 func (k *Keyring) CalibrateSquaringSpeed(n *big.Int) int64 { 
@@ -116,16 +130,23 @@ func TestTimeLockPuzzle() {
 	// Generate global keys (public and private)
 	keyring.GenerateKeys()
 
-	// Encrypt the private key with the time-lock puzzle
-	fmt.Printf("Encrypting the private key with a time-lock puzzle for %d seconds...\n", T)
-	keyring.puzzle = keyring.GenerateTimeLockedPuzzle(keyring.globalPrivateKey, T)
+	// Create variations (assuming we need them to encrypt the cards)
+	keyring.GenerateKeyVariations(5)
+	
+	// Create payload
+	keyring.GenerateKeyringPayload()
+	fmt.Println(keyring.KeyringPayload)
+
+	// Lock payload with a time lock
+	fmt.Printf("Encrypting the payload with a time-lock puzzle for %d seconds...\n", T)
+	keyring.puzzle = keyring.GenerateTimeLockedPuzzle(keyring.KeyringPayload, T)
 
 
 	// Measure the decryption time
 	start := time.Now()
 
-	fmt.Printf("Starting decryption of the time-locked private key...\n")
-	answer := keyring.BreakTimeLockedPuzzle(keyring.puzzle.lockedPuzzle, keyring.puzzle.encryptionIterations, keyring.puzzle.n)
+	fmt.Printf("Starting decryption of the time-locked payload...\n")
+	plainTextPayload := keyring.BreakTimeLockedPuzzle(keyring.puzzle.lockedPuzzle, keyring.puzzle.payload, keyring.puzzle.encryptionIterations, keyring.puzzle.n)
 
 	elapsed := time.Since(start).Seconds()
 	fmt.Printf("Decryption completed in approximately %.2f seconds\n", elapsed)
@@ -137,9 +158,9 @@ func TestTimeLockPuzzle() {
 	}
 
 	// Validate that the decrypted private key matches the original private key
-	if answer.Cmp(keyring.globalPrivateKey) != 0 {
-		fmt.Println("Decrypted private key does not match the original private key")
+	if plainTextPayload != keyring.KeyringPayload {
+		fmt.Println("Decrypted payload does not match the original payload")
 	} else {
-		fmt.Println("Decrypted private key matches the original private key!")
+		fmt.Println("Decrypted payload matches the original payload!")
 	}
 }

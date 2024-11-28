@@ -55,6 +55,25 @@ func (k *Keyring) DecryptWithVariation(data *big.Int, index int) (*big.Int, erro
 	return new(big.Int).Exp(data, k.keyVariations[index].privateKey, k.globalN), nil
 }
 
+func (k *Keyring) GenerateKeyringPayload() error {
+	if k.globalPublicKey == nil || k.globalPrivateKey == nil || k.keyVariations == nil {
+		return fmt.Errorf("Error: Missing keys or variations")
+	}
+
+	// Start with global public and private keys
+	payload := fmt.Sprintf("%s\n%s\n", k.globalPublicKey.String(), k.globalPrivateKey.String())
+
+	// Append each variation's `r` value
+	for _, variation := range k.keyVariations {
+		if variation != nil {
+			payload += fmt.Sprintf("%s\n", variation.variationValue.String())
+		}
+	}
+
+	k.KeyringPayload = payload
+	return nil
+}
+
 func TestVariations() {
 	k := &Keyring{}
 	k.GeneratePQ()
@@ -76,4 +95,24 @@ func TestVariations() {
 	// Verify
 	fmt.Println("Original:", message)
 	fmt.Println("Decrypted:", plainText)
+}
+
+func TestGenerateKeyringPayload() {
+    k := &Keyring{}
+    k.GeneratePQ()
+    k.GenerateKeys()
+
+    // Generate key variations
+    err := k.GenerateKeyVariations(5)
+    if err != nil {
+        fmt.Println("Error generating key variations:", err)
+        return
+    }
+
+    // Generate payload
+    k.GenerateKeyringPayload()
+
+    // Print the payload
+    fmt.Println("Keyring Payload:")
+    fmt.Println(k.KeyringPayload)
 }
