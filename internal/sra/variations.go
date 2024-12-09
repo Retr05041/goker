@@ -98,21 +98,21 @@ func TestVariations() {
 }
 
 func TestGenerateKeyringPayload() {
-    k := &Keyring{}
-    k.GeneratePQ()
-    k.GenerateKeys()
+	k := &Keyring{}
+	k.GeneratePQ()
+	k.GenerateKeys()
 
-    // Generate key variations
-    err := k.GenerateKeyVariations(5)
-    if err != nil {
-        fmt.Println("Error generating key variations:", err)
-        return
-    }
+	// Generate key variations
+	err := k.GenerateKeyVariations(5)
+	if err != nil {
+		fmt.Println("Error generating key variations:", err)
+		return
+	}
 
-    // Generate payload
-    k.GenerateKeyringPayload()
+	// Generate payload
+	k.GenerateKeyringPayload()
 
-    // Print the payload
-    fmt.Println("Keyring Payload:")
-    fmt.Println(k.KeyringPayload)
+	// Print the payload
+	fmt.Println("Keyring Payload:")
+	fmt.Println(k.KeyringPayload)
 }

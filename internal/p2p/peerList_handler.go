@@ -1,42 +1,42 @@
 package p2p
 
 import (
-	"fmt"
 	"bufio"
 	"context"
+	"fmt"
 	"log"
 	"strings"
+
 	"github.com/libp2p/go-libp2p/core/peer"
 
 	"github.com/multiformats/go-multiaddr"
 )
 
 // Get a formatted list of peers - ignores self
-func (s *BootstrapServer) getPeerList() string {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
+func (p *GokerPeer) getPeerList() string {
+	p.peerListMutex.Lock()
+	defer p.peerListMutex.Unlock()
 
 	var peerList string
-	for peerID, addr := range s.peers {
-		if peerID != s.host.ID() {
+	for peerID, addr := range p.peerList {
+		if peerID != p.thisHost.ID() {
 			peerList += fmt.Sprintf("%s %s\n", peerID.String(), addr.String()) // Sends peer list as a multi-line string
 		}
 	}
 	return peerList
 }
 
-
 // Add a peer to the server's list
-func (s *BootstrapServer) addPeer(peerID peer.ID, addr multiaddr.Multiaddr) {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-	s.peers[peerID] = addr
+func (p *GokerPeer) addPeer(peerID peer.ID, addr multiaddr.Multiaddr) {
+	p.peerListMutex.Lock()
+	defer p.peerListMutex.Unlock()
+	p.peerList[peerID] = addr
 }
 
 // Set the peer list (Given the output from the getPeerList function) and connect to all peers
-func (s *BootstrapServer) setPeerList(peerList string) {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
+func (p *GokerPeer) setPeerList(peerList string) {
+	p.peerListMutex.Lock()
+	defer p.peerListMutex.Unlock()
 
 	scanner := bufio.NewScanner(strings.NewReader(peerList)) // Put it in a scanner for processing
 	for scanner.Scan() {                                     // Next token
@@ -49,11 +49,11 @@ func (s *BootstrapServer) setPeerList(peerList string) {
 		if err == nil {
 			addr, err := multiaddr.NewMultiaddr(parts[1]) // Make it a multiaddr
 			if err == nil {
-				if _, exists := s.peers[pid]; !exists {
-					s.peers[pid] = addr
+				if _, exists := p.peerList[pid]; !exists {
+					p.peerList[pid] = addr
 					// Connect to each peer
 					addrInfo := peer.AddrInfo{ID: pid, Addrs: []multiaddr.Multiaddr{addr}}
-					if err := s.host.Connect(context.Background(), addrInfo); err != nil {
+					if err := p.thisHost.Connect(context.Background(), addrInfo); err != nil {
 						log.Printf("Failed to connect to peer %s: %v", pid, err)
 					} else {
 						fmt.Printf("Connected to new peer: %s", pid)

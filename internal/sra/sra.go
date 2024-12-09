@@ -4,22 +4,22 @@ package sra
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"fmt"
 	"math/big"
-	"crypto/sha256"
 )
 
 type Keyring struct {
-	sharedP, sharedQ *big.Int 
+	sharedP, sharedQ *big.Int
 
 	// Global keys (one set for encrypting every card)
 	globalPrivateKey, globalPublicKey, globalN, globalPHI *big.Int
 
-    // Variations of the global keys
-    keyVariations []*KeyVariation
+	// Variations of the global keys
+	keyVariations []*KeyVariation
 
 	// Time locking
-	puzzle *TimeLock	
+	puzzle         *TimeLock
 	KeyringPayload string
 }
 
@@ -34,7 +34,7 @@ func (k *Keyring) GeneratePQ() {
 	if err != nil {
 		fmt.Println(err)
 	}
-	
+
 	k.sharedP = p
 	k.sharedQ = q
 }
@@ -68,8 +68,8 @@ func modInverse(a, m *big.Int) (*big.Int, error) {
 		t := new(big.Int).Set(mCopy) // store m for this iteration
 
 		mCopy.Set(new(big.Int).Mod(a, mCopy)) // m = a mod m
-		a = t                         // set previous value of m becomes a
-		t = new(big.Int).Set(y)       // set the hold var to old y
+		a = t                                 // set previous value of m becomes a
+		t = new(big.Int).Set(y)               // set the hold var to old y
 
 		y = new(big.Int).Set(new(big.Int).Sub(x, new(big.Int).Mul(quotent, y))) // y = x-(quotent * m)
 		x = t                                                                   // x now becomes old y

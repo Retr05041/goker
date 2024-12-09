@@ -103,3 +103,74 @@ My idea for key time locked:
 bundle global private and public key and all r's (variation numbers) into a payload, encrypt with a symmetric key, and time lock that key
 send puzzle (key) and payload (encrypted with AES) to peer
 once broken, they can construct all variations and decrypt the cards
+
+--- INTERIM NOTES
+
+Make related work it's own section
+
+Don't make motivation a subsection - start with it
+
+make aims and objectives a subsection
+
+Introduction:
+remove "client" from introduction "distrobuted poker client"
+"Why do you use commutative encryption and time locking"
+"empahsize secure" - You don't want anyone to influence the randomness or read the cards prematurely, hence the commutative encryption (Don't have to say this in my aim)
+same story for time locking (robustness) - wanna be secure against people that could collude by having one person pull out, cause you can't compute the following hands (could be someone else whos benifiting from it)
+DEFEND THIS!
+
+1. SRA encryption TO shuffle the deck
+2. Goal for time locked puzzles (of what? Secret for SRA...)
+3. Reference command design pattern..
+
+Related work:
+More extensive for dissertation...
+Beef it up a bit if I can
+"Verify delay function" VDF
+Doesn't need to be that related... (some are used in the introduction)
+loosen the notion of related work - papers, other stuff being implemented in SRA, timelocking, other applications of mental poker
+"Bezentine fault tolerance" - HINT (besentine generals problem)
+"Intention is not important" - in relation to the problem above and my problem
+IF I CAN DO THIS FOR INTERIM THEN GREATE - is needed for diss no matter what...
+
+Encryption Design
+Talk about how you CANNOT share the public key (that also differes from RSA)
+Discrete logarithm problem 
+RSA problem: 1 no one can compute descrete logarithm, and no one can compute d from e
+SRA problem: Just descrete logarithm problem
+
+Instead just define SRA (first 5 steps are correct), just the end
+
+
+MAKE DESCRIPTION OF WORK IT'S OWN SECTION (call it approach?)
+1.3 is supposed to be a lot more concise, take what I put for there and put it somewhere else.
+"We need to have an implementation of this this and that"
+"User interface, where you can play poker, and a backend that can handle poker hands and handle encryption"
+very short description of what my tool does
+1.3 can be design (it's own section)
+Restructure to be more explicite
+
+Don't need "description of the work"
+
+
+Techqnue meant to apply - methodology
+design or approach - 1.3
+
+show correlation for clockspeed and timelock (for dissertation) (site those who have done it)
+
+Contributions and Relections:
+This part of the program took a bit longer than expected, - Don't say this
+Just say what I have done.
+Talk about possible challenges I went through - if they were interesting
+
+
+All information is there, just do a restructuring 
+section 3 (which might become section 4 or 5) I talk about what I have already done
+
+
+
+
+
+
+
+
