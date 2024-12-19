@@ -1,9 +1,9 @@
 package main
 
 import (
-	"goker/internal/gui"
+	"goker/internal/game"
 )
 
 func main() {
-	gui.Init()
+	game.TestDeck()
 }
