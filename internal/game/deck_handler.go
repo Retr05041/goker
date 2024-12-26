@@ -29,10 +29,15 @@ func (g *GameInfo) GenerateRefDeck(key string) {
 }
 
 // Generate the round deck, which will just be all the hash's from the reference deck
-func (g *GameInfo) GenerateRoundDeck() {
+func (g *GameInfo) GenerateRoundDeck(key string) {
 	newDeck := make([]*big.Int, 0, 52)
-	for _, hash := range g.ReferenceDeck {
-		newDeck = append(newDeck, hash)
+
+	for _, suit := range suits {
+		for _, rank := range ranks {
+			cardName := rank + " " + suit
+			cardHash := generateCardHash(cardName, key)
+			newDeck = append(newDeck, cardHash)
+		}
 	}
 	g.RoundDeck = newDeck
 }
@@ -44,21 +49,40 @@ func (g *GameInfo) ShuffleRoundDeck() {
 	})
 }
 
+func (g *GameInfo) GetCardFromRefDeck(cardHash *big.Int) (key string, ok bool) {
+  for k, v := range g.ReferenceDeck {
+    if v.Cmp(cardHash) == 0 { 
+      return k, true
+    }
+  }
+  return "", false
+}
+
 func TestDeck() {
 	newGame := new(GameInfo)
 
 	newGame.GenerateRefDeck("mysupersecretkey")
-	newGame.GenerateRoundDeck()
-	for i, v := range newGame.RoundDeck {
-		fmt.Print(strconv.Itoa(i) + " - ")
+	newGame.GenerateRoundDeck("mysupersecretkey")
+	for _, v := range newGame.RoundDeck {
+		card, ok := newGame.GetCardFromRefDeck(v)
+		if !ok {
+			fmt.Println("CARD NOT FOUND")
+		}
+		fmt.Print(card + " - ")
 		fmt.Println(v.String())
 	}
 
+	fmt.Println("")
 	fmt.Println("---")
+	fmt.Println("")
 
 	newGame.ShuffleRoundDeck()
-	for i, v := range newGame.RoundDeck {
-		fmt.Print(strconv.Itoa(i) + " - ")
+	for _, v := range newGame.RoundDeck {
+		card, ok := newGame.GetCardFromRefDeck(v)
+		if !ok {
+			fmt.Println("CARD NOT FOUND")
+		}
+		fmt.Print(card + " - ")
 		fmt.Println(v.String())
 	}
 
