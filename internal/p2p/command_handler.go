@@ -1,7 +1,6 @@
 package p2p
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"io"
@@ -40,7 +39,7 @@ func (pq *PQRequestCommand) Execute(peer *GokerPeer) {
 	}
 	defer stream.Close()
 
-	_, err = stream.Write([]byte("CMDpqrequest\n"))
+	_, err = stream.Write([]byte("CMDpqrequest\n\\END\n"))
 	if err != nil {
 		log.Printf("PQRequest: Failed to send command to host %s: %v\n", peer.sessionHost, err)
 	} else {
@@ -92,8 +91,8 @@ func (sp *StartProtocolCommand) Execute(peer *GokerPeer) {
 		}
 		defer stream.Close()
 
-		// Send the deck
-		_, err = stream.Write([]byte(fmt.Sprintf("CMDstartprotocol %s\\END\n", peer.gameInfo.GenerateDeckPayload())))
+		// Send the deck TODO: THIS IS BEING CAUGHT AS A PROBLEM ON THE SENDING PEER
+		_, err = stream.Write([]byte(fmt.Sprintf("CMDstartprotocol %s\n\\END\n", peer.gameInfo.GenerateDeckPayload())))
 		if err != nil {
 			log.Printf("StartProtocol: Failed to send deck to peer %s: %v\n", peerID, err)
 		} else {
@@ -101,26 +100,14 @@ func (sp *StartProtocolCommand) Execute(peer *GokerPeer) {
 		}
 
 		// Get the response (the new deck)
-		var payload strings.Builder
-		reader := bufio.NewReader(stream)
-		for {
-			// Read line by line
-			line, err := reader.ReadString('\n')
-			if err != nil {
-				log.Println("StartProtocol: error reading from stream: %w", err)
-			}
-
-			// Check for the end marker
-			if strings.TrimSpace(line) == "\\END" {
-				break
-			}
-
-			// Append the line to the payload
-			payload.WriteString(line)
+		responseBytes, err := io.ReadAll(stream)
+		if err != nil {
+			log.Printf("StartProtocol: Failed to read response from host %s: %v\n", peer.sessionHost, err)
+		} else {
+			peer.gameInfo.SetDeck(string(responseBytes))
+			fmt.Printf("StartProtocol: Received response from peer %s: %s\n", peerID, string(responseBytes))
 		}
 
-		peer.gameInfo.SetDeck(payload.String())
-		fmt.Printf("StartProtocol: Received response from peer %s: %s\n", peerID, payload.String())
 	}
 	peer.gameInfo.DisplayDeck()
 }

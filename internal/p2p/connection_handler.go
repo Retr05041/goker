@@ -65,20 +65,31 @@ func (p *GokerPeer) handleStream(stream network.Stream) {
 	defer stream.Close()
 	fmt.Println("New stream detected... getting command.")
 
-	// Continuously read and process commands
-	reader := bufio.NewReader(stream)
-
 	// Read incoming command
-	message, err := reader.ReadString('\n')
-	if err != nil {
-		log.Printf("Error reading from stream: %v", err)
-		return
+	var message strings.Builder
+	reader := bufio.NewReader(stream)
+	for {
+		// Read line by line
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			log.Println("handleStream: error reading from stream: %w", err)
+		}
+
+		// Check for the end marker
+		if strings.TrimSpace(line) == "\\END" {
+			break
+		}
+
+		// Append the line to the payload
+		message.WriteString(line)
 	}
-	message = strings.TrimSpace(message)
+
+	cleanedMessage := strings.TrimSpace(message.String())
 
 	// Split the command and the payload
-	parts := strings.SplitN(message, " ", 2)
+	parts := strings.SplitN(cleanedMessage, " ", 2)
 	command := parts[0]
+	fmt.Println(command)
 	var payload string
 	if len(parts) > 1 {
 		payload = parts[1]
@@ -101,7 +112,7 @@ func (p *GokerPeer) handleStream(stream network.Stream) {
 		p.gameInfo.SetDeck(payload)
 		p.RespondToCommand(&StartProtocolCommand{}, stream)
 	default:
-		log.Printf("Unknown Response Recieved: %s\n", message)
+		log.Printf("Unknown Response Recieved: %s\n", cleanedMessage)
 	}
 }
 
@@ -139,7 +150,7 @@ func (p *GokerPeer) connectToHost(peerAddr string) {
 	defer stream.Close()
 
 	// Request the peer list
-	_, err = stream.Write([]byte("CMDgetpeers\n"))
+	_, err = stream.Write([]byte("CMDgetpeers\n\\END\n"))
 	if err != nil {
 		log.Fatalf("Failed to send CMDgetpeers command: %v", err)
 	}
