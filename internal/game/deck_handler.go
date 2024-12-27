@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"math/big"
 	"math/rand"
-	"strconv"
+	"strings"
 )
 
 var ranks = [...]string{"ACE", "TWO", "THREE", "FOUR", "FIVE", "SIX", "SEVEN", "EIGHT", "NINE", "TEN", "JACK", "QUEEN", "KING"}
@@ -21,7 +21,6 @@ func (g *GameInfo) GenerateRefDeck(key string) {
 			cardHash := generateCardHash(cardName, key)
 
 			newRefDeck[cardName] = cardHash
-			fmt.Println(strconv.Itoa(count) + " - " + cardName + " - " + cardHash.String())
 			count++
 		}
 	}
@@ -30,13 +29,15 @@ func (g *GameInfo) GenerateRefDeck(key string) {
 
 // Generate the round deck, which will just be all the hash's from the reference deck
 func (g *GameInfo) GenerateRoundDeck(key string) {
-	newDeck := make([]*big.Int, 0, 52)
+	newDeck := make([]Card, 0, 52)
 
+	index := 0
 	for _, suit := range suits {
 		for _, rank := range ranks {
 			cardName := rank + " " + suit
 			cardHash := generateCardHash(cardName, key)
-			newDeck = append(newDeck, cardHash)
+			newDeck = append(newDeck, Card{index: index, Cardvalue: cardHash})
+			index++
 		}
 	}
 	g.RoundDeck = newDeck
@@ -58,32 +59,28 @@ func (g *GameInfo) GetCardFromRefDeck(cardHash *big.Int) (key string, ok bool) {
   return "", false
 }
 
-func TestDeck() {
-	newGame := new(GameInfo)
+// Creates a payload to be sent to anther peer
+func (g *GameInfo) GenerateDeckPayload() string {
+	// Start with global public and private keys
+	payload := ""
 
-	newGame.GenerateRefDeck("mysupersecretkey")
-	newGame.GenerateRoundDeck("mysupersecretkey")
-	for _, v := range newGame.RoundDeck {
-		card, ok := newGame.GetCardFromRefDeck(v)
-		if !ok {
-			fmt.Println("CARD NOT FOUND")
-		}
-		fmt.Print(card + " - ")
-		fmt.Println(v.String())
+	// Append each variation's `r` value
+	for _, card := range g.RoundDeck {
+		payload += fmt.Sprintf("%s\n", card.Cardvalue.String())
 	}
 
-	fmt.Println("")
-	fmt.Println("---")
-	fmt.Println("")
+	return payload
+}
 
-	newGame.ShuffleRoundDeck()
-	for _, v := range newGame.RoundDeck {
-		card, ok := newGame.GetCardFromRefDeck(v)
-		if !ok {
-			fmt.Println("CARD NOT FOUND")
+// Set the round deck given a payload from another peer in the network
+func (g *GameInfo) SetDeck(payload string) {
+	var newDeck []Card
+	for i, line := range strings.Split(payload, "\n") {
+		if line == "" || line == "\\END" {
+			continue
 		}
-		fmt.Print(card + " - ")
-		fmt.Println(v.String())
+		card, _ := new(big.Int).SetString(line, 10)
+		newDeck = append(newDeck, Card{index: i, Cardvalue: card})
 	}
-
+	g.RoundDeck = newDeck
 }

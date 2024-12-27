@@ -31,6 +31,8 @@ type GokerPeer struct {
 func (p *GokerPeer) Init(hosting bool, givenAddr string) {
 	p.keyring = new(sra.Keyring)
 	p.gameInfo = new(game.GameInfo)
+	p.gameInfo.GenerateRefDeck("mysupersecretkey")
+	p.gameInfo.GenerateRoundDeck("mysupersecretkey")
 
 	// Create a new libp2p Host
 	h, err := libp2p.New()

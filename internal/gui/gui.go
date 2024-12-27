@@ -57,24 +57,16 @@ func showHostUI(myWindow fyne.Window) {
 	copyAddrButton := widget.NewButton("Copy server address", func() {
 		myWindow.Clipboard().SetContent(myself.ThisHostMultiaddr)
 	})
-	pingButton := widget.NewButton("Ping All Peers", func() {
-		myself.ExecuteCommand(&p2p.PingCommand{})
-		fmt.Println("Ping command sent to all peers.")
+	testProtocol := widget.NewButton("Test Protocol", func() {
+		myself.ExecuteCommand(&p2p.StartProtocolCommand{})
+		fmt.Println("Test Protocol done on all peers.")
 	})
-	testEncryptionButton := widget.NewButton("Test Commutative Encryption", func() {
-		myself.ExecuteCommand(&p2p.TestEncryptionCommand{Message: "Hello, World."})
-		fmt.Println("Testing encryption done on all peers.")
-	})
-	myWindow.SetContent(container.NewVBox(copyAddrButton, pingButton, testEncryptionButton))
+	myWindow.SetContent(container.NewVBox(copyAddrButton, testProtocol))
 }
 
 func showConnectedUI(myWindow fyne.Window) {
 	thankLabel := widget.NewLabel("Connected to Host!")
-	pingButton := widget.NewButton("Ping All Peers", func() {
-		myself.ExecuteCommand(&p2p.PingCommand{})
-		fmt.Println("Ping command sent to all peers.")
-	})
-	myWindow.SetContent(container.NewVBox(thankLabel, pingButton))
+	myWindow.SetContent(container.NewVBox(thankLabel))
 }
 
 func tidyUp() {

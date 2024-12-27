@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"math/big"
 	"strings"
 	"time"
 
@@ -87,9 +86,6 @@ func (p *GokerPeer) handleStream(stream network.Stream) {
 
 	// Process the command based on the message
 	switch command {
-	case "CMDping":
-		fmt.Println("Received ping command")
-		p.RespondToCommand(&PingCommand{}, stream)
 	case "CMDgetpeers": // Send peerlist to just this stream
 		fmt.Println("Recieved peer list request")
 		peerList := p.getPeerList()
@@ -100,18 +96,10 @@ func (p *GokerPeer) handleStream(stream network.Stream) {
 	case "CMDpqrequest":
 		fmt.Println("Recieved PQ Request")
 		p.RespondToCommand(&PQRequestCommand{}, stream)
-	case "CMDencrypt":
-		fmt.Println("Recieved Encryption Request on a payload")
-		messageBig := new(big.Int)
-		messageBig.SetString(payload, 10)
-		encryptedMessage := p.keyring.EncryptWithGlobalKeys(messageBig)
-		stream.Write([]byte(encryptedMessage.String() + "\n"))
-	case "CMDdecrypt":
-		fmt.Println("Recieved Decryption Request on a payload")
-		messageBig := new(big.Int)
-		messageBig.SetString(payload, 10)
-		decryptedMessage := p.keyring.DecryptWithGlobalKeys(messageBig)
-		stream.Write([]byte(decryptedMessage.String() + "\n"))
+	case "CMDstartprotocol":
+		fmt.Println("Recieved Start Protocol command")
+		p.gameInfo.SetDeck(payload)
+		p.RespondToCommand(&StartProtocolCommand{}, stream)
 	default:
 		log.Printf("Unknown Response Recieved: %s\n", message)
 	}
