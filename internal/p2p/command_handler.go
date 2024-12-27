@@ -77,8 +77,8 @@ type StartProtocolCommand struct{}
 func (sp *StartProtocolCommand) Execute(peer *GokerPeer) {
 	peer.peerListMutex.Lock()
 	defer peer.peerListMutex.Unlock()
+	fmt.Println(peer.gameInfo.GenerateDeckPayload())
 
-	peer.gameInfo.DisplayDeck()
 	for peerID := range peer.peerList {
 		if peerID == peer.thisHost.ID() {
 			continue
@@ -92,7 +92,7 @@ func (sp *StartProtocolCommand) Execute(peer *GokerPeer) {
 		}
 		defer stream.Close()
 
-		// Send the "ping"
+		// Send the deck
 		_, err = stream.Write([]byte(fmt.Sprintf("CMDstartprotocol %s\\END\n", peer.gameInfo.GenerateDeckPayload())))
 		if err != nil {
 			log.Printf("StartProtocol: Failed to send deck to peer %s: %v\n", peerID, err)
@@ -120,13 +120,14 @@ func (sp *StartProtocolCommand) Execute(peer *GokerPeer) {
 		}
 
 		peer.gameInfo.SetDeck(payload.String())
-		fmt.Printf("StartProtocol: Received response from peer %s\n", peerID)
+		fmt.Printf("StartProtocol: Received response from peer %s: %s\n", peerID, payload.String())
 	}
 	peer.gameInfo.DisplayDeck()
 }
 
 // Respond to a start protocol command - when this is called a new deck should be set already
 func (sp *StartProtocolCommand) Respond(peer *GokerPeer, sendingStream network.Stream) {
+	peer.gameInfo.DisplayDeck()
 	// Encrypt the deck with your global keys, shuffle it, then create a new payload to send back
 	peer.gameInfo.RoundDeck = peer.keyring.EncryptAllWithGlobalKeys(peer.gameInfo.RoundDeck)
 	peer.gameInfo.ShuffleRoundDeck()
