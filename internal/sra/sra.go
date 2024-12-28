@@ -86,6 +86,7 @@ func modInverse(a, m *big.Int) (*big.Int, error) {
 
 // Key generation - returns: private key, public key, modulus
 // The given p and q are two large primes the players have agreed on - this will create keys that are commutative
+// This function also sets the needed 52 Variation keys
 func (k *Keyring) GenerateKeys() error {
 	if k.sharedP == nil || k.sharedQ == nil {
 		return fmt.Errorf("P and Q not set.")
@@ -110,6 +111,7 @@ func (k *Keyring) GenerateKeys() error {
 	}
 
 	k.globalPrivateKey, k.globalPublicKey, k.globalN, k.globalPHI = privateKey, publicKey, n, phi
+	k.GenerateKeyVariations(52) // We need to create variations each round, so we will do this on Generate Keys
 	return nil
 }
 
@@ -155,6 +157,14 @@ func (k *Keyring) EncryptAllWithGlobalKeys(data []game.Card) []game.Card {
 // Should check if keys exist before attempting
 func (k *Keyring) DecryptWithGlobalKeys(data *big.Int) *big.Int {
 	return new(big.Int).Exp(data, k.globalPrivateKey, k.globalN)
+}
+
+// Same as DecryptWithGlobalKeys but over a list of Cards
+func (k *Keyring) DecryptAllWithGlobalKeys(data []game.Card) []game.Card {
+	for i, v := range data {
+		data[i].Cardvalue = k.DecryptWithGlobalKeys(v.Cardvalue)
+	}
+	return data
 }
 
 // Use on hash after full decryption to pad it back to full and return it as a string

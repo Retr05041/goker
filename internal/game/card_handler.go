@@ -6,6 +6,12 @@ import (
 	"math/big"
 )
 
+type Card struct {
+	index          int
+	VariationIndex int
+	Cardvalue      *big.Int
+}
+
 // GenerateCardHash generates a hash for a card
 func generateCardHash(card string, secretKey string) *big.Int {
 	h := hmac.New(sha256.New, []byte(secretKey))

@@ -57,16 +57,28 @@ func showHostUI(myWindow fyne.Window) {
 	copyAddrButton := widget.NewButton("Copy server address", func() {
 		myWindow.Clipboard().SetContent(myself.ThisHostMultiaddr)
 	})
-	testProtocol := widget.NewButton("Test Protocol", func() {
-		myself.ExecuteCommand(&p2p.StartProtocolCommand{})
-		fmt.Println("Test Protocol done on all peers.")
+	testProtocolFS := widget.NewButton("Test ProtocolFS", func() {
+		myself.ExecuteCommand(&p2p.ProtocolFirstStep{})
+		fmt.Println("Test ProtocolFS done on all peers.")
 	})
-	myWindow.SetContent(container.NewVBox(copyAddrButton, testProtocol))
+	testProtocolSS := widget.NewButton("Test ProtocolSS", func() {
+		myself.ExecuteCommand(&p2p.ProtocolSecondStep{})
+		fmt.Println("Test ProtocolSS done on all peers.")
+	})
+	DisplayDeck := widget.NewButton("Display Current Deck", func() {
+		myself.DisplayDeck()
+		fmt.Println("Deck Displayed.")
+	})
+	myWindow.SetContent(container.NewVBox(copyAddrButton, testProtocolFS, testProtocolSS, DisplayDeck))
 }
 
 func showConnectedUI(myWindow fyne.Window) {
 	thankLabel := widget.NewLabel("Connected to Host!")
-	myWindow.SetContent(container.NewVBox(thankLabel))
+	DisplayDeck := widget.NewButton("Display Current Deck", func() {
+		myself.DisplayDeck()
+		fmt.Println("Deck Displayed.")
+	})
+	myWindow.SetContent(container.NewVBox(thankLabel, DisplayDeck))
 }
 
 func tidyUp() {

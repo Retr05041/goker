@@ -2,6 +2,8 @@ package sra
 
 import (
 	"fmt"
+	"goker/internal/game"
+	"log"
 	"math/big"
 	"strconv"
 )
@@ -46,6 +48,19 @@ func (k *Keyring) EncryptWithVariation(data *big.Int, index int) (*big.Int, erro
 		return nil, fmt.Errorf("invalid key variation index")
 	}
 	return new(big.Int).Exp(data, k.keyVariations[index].publicKey, k.globalN), nil
+}
+
+// like EncryptAllWithVariation but on Cards and it does it for all of them
+func (k *Keyring) EncryptAllWithVariation(data []game.Card) []game.Card {
+	for i, v := range data {
+		encryptedV, err := k.EncryptWithVariation(v.Cardvalue, i)
+		if err != nil {
+			log.Println(err)
+		}
+		data[i].Cardvalue = encryptedV
+		data[i].VariationIndex = i
+	}
+	return data 
 }
 
 func (k *Keyring) DecryptWithVariation(data *big.Int, index int) (*big.Int, error) {

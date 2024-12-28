@@ -8,7 +8,7 @@ import (
 // Holds the current game info (updated per round)
 type GameInfo struct {
 	// Holds a map of name to hash
-	ReferenceDeck       map[string]*big.Int
+	ReferenceDeck map[string]*big.Int
 	// Holds hash's that will be encrypted and shuffled per round
 	RoundDeck []Card
 
@@ -16,10 +16,6 @@ type GameInfo struct {
 	deckHashSecret *big.Int
 }
 
-type Card struct {
-	index int
-	Cardvalue *big.Int
-}
 
 func (g *GameInfo) DisplayDeck() {
 	for _, v := range g.RoundDeck {

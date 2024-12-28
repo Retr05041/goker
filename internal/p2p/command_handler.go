@@ -63,20 +63,22 @@ func (pq *PQRequestCommand) Respond(peer *GokerPeer, sendingStream network.Strea
 	PQData := peer.keyring.GetPQString()
 	_, err := sendingStream.Write([]byte(PQData))
 	if err != nil {
-		log.Printf("PQRequestResponse: Failed to send PQ to peer %s: %v", sendingStream.Conn().RemotePeer(), err)
+		log.Printf("PQRequestResponse: Failed to send PQ to peer %s: %v\n", sendingStream.Conn().RemotePeer(), err)
 	} else {
-		fmt.Printf("PQRequestResponse: Sent PQ to peer %s", sendingStream.Conn().RemotePeer())
+		fmt.Printf("PQRequestResponse: Sent PQ to peer %s\n", sendingStream.Conn().RemotePeer())
 	}
 }
 
 // / ### PROTOCOL ###
-type StartProtocolCommand struct{}
+type ProtocolFirstStep struct{}
 
 // Send deck to every peer, allow them to shuffle and encrypt the deck
-func (sp *StartProtocolCommand) Execute(peer *GokerPeer) {
+func (sp *ProtocolFirstStep) Execute(peer *GokerPeer) {
+	peer.gameInfo.RoundDeck = peer.keyring.EncryptAllWithGlobalKeys(peer.gameInfo.RoundDeck)
+	peer.gameInfo.ShuffleRoundDeck()
+
 	peer.peerListMutex.Lock()
 	defer peer.peerListMutex.Unlock()
-	fmt.Println(peer.gameInfo.GenerateDeckPayload())
 
 	for peerID := range peer.peerList {
 		if peerID == peer.thisHost.ID() {
@@ -86,38 +88,88 @@ func (sp *StartProtocolCommand) Execute(peer *GokerPeer) {
 		// Create a new stream to the peer
 		stream, err := peer.thisHost.NewStream(context.Background(), peerID, protocolID)
 		if err != nil {
-			log.Printf("PingCommand: Failed to create stream to peer %s: %v\n", peerID, err)
+			log.Printf("ProtocolFirstStep: Failed to create stream to peer %s: %v\n", peerID, err)
 			continue
 		}
 		defer stream.Close()
 
-		// Send the deck TODO: THIS IS BEING CAUGHT AS A PROBLEM ON THE SENDING PEER
-		_, err = stream.Write([]byte(fmt.Sprintf("CMDstartprotocol %s\n\\END\n", peer.gameInfo.GenerateDeckPayload())))
+		// Send the deck
+		_, err = stream.Write([]byte(fmt.Sprintf("CMDprotocolFS %s\n\\END\n", peer.gameInfo.GenerateDeckPayload())))
 		if err != nil {
-			log.Printf("StartProtocol: Failed to send deck to peer %s: %v\n", peerID, err)
+			log.Printf("ProtocolFirstStep: Failed to send deck to peer %s: %v\n", peerID, err)
 		} else {
-			fmt.Printf("StartProtocol: Sent deck to peer %s\n", peerID)
+			fmt.Printf("ProtocolFirstStep: Sent deck to peer %s\n", peerID)
 		}
 
 		// Get the response (the new deck)
 		responseBytes, err := io.ReadAll(stream)
 		if err != nil {
-			log.Printf("StartProtocol: Failed to read response from host %s: %v\n", peer.sessionHost, err)
+			log.Printf("ProtocolFirstStep: Failed to read response from host %s: %v\n", peer.sessionHost, err)
 		} else {
 			peer.gameInfo.SetDeck(string(responseBytes))
-			fmt.Printf("StartProtocol: Received response from peer %s: %s\n", peerID, string(responseBytes))
+			fmt.Printf("ProtocolFirstStep: Received response from peer %s\n", peerID)
 		}
 
 	}
-	peer.gameInfo.DisplayDeck()
 }
 
-// Respond to a start protocol command - when this is called a new deck should be set already
-func (sp *StartProtocolCommand) Respond(peer *GokerPeer, sendingStream network.Stream) {
-	peer.gameInfo.DisplayDeck()
+// Respond to a protocol's first command - Encrypt with global keys, shuffle, then send back - when this is called a new deck should be set already
+func (sp *ProtocolFirstStep) Respond(peer *GokerPeer, sendingStream network.Stream) {
 	// Encrypt the deck with your global keys, shuffle it, then create a new payload to send back
 	peer.gameInfo.RoundDeck = peer.keyring.EncryptAllWithGlobalKeys(peer.gameInfo.RoundDeck)
 	peer.gameInfo.ShuffleRoundDeck()
+	processedDeck := peer.gameInfo.GenerateDeckPayload()
+
+	// Send the updated deck back to the sender
+	_, err := sendingStream.Write([]byte(fmt.Sprintf("%s\\END\n", processedDeck)))
+	if err != nil {
+		log.Printf("StartProtocol Respond: Failed to send response: %v\n", err)
+	}
+}
+
+type ProtocolSecondStep struct{}
+
+// For getting others to encrypt with their variation keys
+func (sp *ProtocolSecondStep) Execute(peer *GokerPeer) {
+	peer.peerListMutex.Lock()
+	defer peer.peerListMutex.Unlock()
+
+	for peerID := range peer.peerList {
+		if peerID == peer.thisHost.ID() {
+			continue
+		}
+
+		// Create a new stream to the peer
+		stream, err := peer.thisHost.NewStream(context.Background(), peerID, protocolID)
+		if err != nil {
+			log.Printf("ProtocolSecondStep: Failed to create stream to peer %s: %v\n", peerID, err)
+			continue
+		}
+		defer stream.Close()
+
+		// Send the deck
+		_, err = stream.Write([]byte(fmt.Sprintf("CMDprotocolSS %s\n\\END\n", peer.gameInfo.GenerateDeckPayload())))
+		if err != nil {
+			log.Printf("ProtocolSecondStep: Failed to send deck to peer %s: %v\n", peerID, err)
+		} else {
+			fmt.Printf("ProtocolSecondStep: Sent deck to peer %s\n", peerID)
+		}
+
+		// Get the response (the new deck)
+		responseBytes, err := io.ReadAll(stream)
+		if err != nil {
+			log.Printf("ProtocolSecondStep: Failed to read response from host %s: %v\n", peer.sessionHost, err)
+		} else {
+			peer.gameInfo.SetDeck(string(responseBytes))
+			fmt.Printf("ProtocolSecondStep: Received response from peer %s\n", peerID)
+		}
+	}
+}
+
+// Respond to the protocols second command - Decrypt global keys, encrypt with variation, then send back- when this is called a new deck should be set already
+func (sp *ProtocolSecondStep) Respond(peer *GokerPeer, sendingStream network.Stream) {
+	peer.gameInfo.RoundDeck = peer.keyring.DecryptAllWithGlobalKeys(peer.gameInfo.RoundDeck)
+	peer.gameInfo.RoundDeck = peer.keyring.EncryptAllWithVariation(peer.gameInfo.RoundDeck)
 	processedDeck := peer.gameInfo.GenerateDeckPayload()
 
 	// Send the updated deck back to the sender

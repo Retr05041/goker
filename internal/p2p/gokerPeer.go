@@ -74,3 +74,7 @@ func (p *GokerPeer) Init(hosting bool, givenAddr string) {
 	// Handle notifications forever
 	go p.handleNotifications()
 }
+
+func (g *GokerPeer) DisplayDeck() {
+	g.gameInfo.DisplayDeck()
+}
