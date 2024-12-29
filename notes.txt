@@ -169,6 +169,12 @@ section 3 (which might become section 4 or 5) I talk about what I have already d
 
 
 
+----------
+
+Shuffle index's of the cards, then assign them to their new index:
+ - Encryption for the protocol happens seperately than the shuffle
+ - Sending a commmand to shuffle just sends back the new index of each card?
+
 
 
 
