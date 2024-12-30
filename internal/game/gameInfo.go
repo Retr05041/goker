@@ -18,8 +18,8 @@ type GameInfo struct {
 
 
 func (g *GameInfo) DisplayDeck() {
-	for _, v := range g.RoundDeck {
-		fmt.Print(v.index)
+	for i, v := range g.RoundDeck {
+		fmt.Print(i)
 		fmt.Print(" - ")
 		fmt.Println(v.Cardvalue.String())
 	}

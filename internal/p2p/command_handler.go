@@ -131,6 +131,11 @@ type ProtocolSecondStep struct{}
 
 // For getting others to encrypt with their variation keys
 func (sp *ProtocolSecondStep) Execute(peer *GokerPeer) {
+	// First, the host of the game (the one initialing the protocols steps) will encrypt with variations
+	peer.gameInfo.RoundDeck = peer.keyring.DecryptAllWithGlobalKeys(peer.gameInfo.RoundDeck) // Decrypt global keys
+	peer.gameInfo.RoundDeck = peer.keyring.EncryptAllWithVariation(peer.gameInfo.RoundDeck) // Add encryption to every card
+
+	// Time to get the peers to do the same
 	peer.peerListMutex.Lock()
 	defer peer.peerListMutex.Unlock()
 
@@ -160,7 +165,7 @@ func (sp *ProtocolSecondStep) Execute(peer *GokerPeer) {
 		if err != nil {
 			log.Printf("ProtocolSecondStep: Failed to read response from host %s: %v\n", peer.sessionHost, err)
 		} else {
-			peer.gameInfo.SetDeck(string(responseBytes))
+			peer.gameInfo.SetDeck(string(responseBytes)) // Setting the deck without changing it as no shuffling was done
 			fmt.Printf("ProtocolSecondStep: Received response from peer %s\n", peerID)
 		}
 	}
