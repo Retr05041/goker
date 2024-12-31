@@ -6,19 +6,34 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
+	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/widget"
 )
 
-var myself *p2p.GokerPeer
-
 func Init() {
-	myself = new(p2p.GokerPeer) // Need to initialise myself so I can use it
+	// Setup myself
+	myself = new(p2p.GokerPeer)
 
+	// Setup GUI
 	myApp := app.New()
-	myWindow := myApp.NewWindow("Choice Widgets")
+	myWindow := myApp.NewWindow("Goker")
 
+	// Setup Main Menu
+	showCardUI(myWindow)
+
+	// Run GUI
+	myWindow.Resize(fyne.NewSize(float32(MAX_WIDTH), float32(MAX_HEIGHT))) // Set the window size
+	myWindow.ShowAndRun()
+}
+
+func showMenuUI(myWindow fyne.Window) {
 	var choice string
+
+	banner := canvas.NewText("Goker", BLUE)
+	banner.TextSize = 24
+	banner.TextStyle = fyne.TextStyle{Bold: true, Italic: false}
+	banner.Alignment = fyne.TextAlignCenter
 
 	inputedAddress := widget.NewEntry()
 	inputedAddress.SetPlaceHolder("Host address...")
@@ -46,13 +61,11 @@ func Init() {
 		choice = value
 	})
 
-	menuContent := container.NewGridWrap(fyne.NewSize(300, 200), container.NewVBox(peerType, inputedAddress, submit))
+	menuContent := container.NewGridWrap(fyne.NewSize(float32(MAX_WIDTH), float32(MAX_HEIGHT)), container.NewVBox(banner, peerType, inputedAddress, submit))
 	myWindow.SetContent(container.NewCenter(menuContent))
-	myWindow.Show()
-	myApp.Run()
-	tidyUp()
 }
 
+// What the host will see
 func showHostUI(myWindow fyne.Window) {
 	copyAddrButton := widget.NewButton("Copy server address", func() {
 		myWindow.Clipboard().SetContent(myself.ThisHostMultiaddr)
@@ -72,6 +85,7 @@ func showHostUI(myWindow fyne.Window) {
 	myWindow.SetContent(container.NewVBox(copyAddrButton, testProtocolFS, testProtocolSS, DisplayDeck))
 }
 
+// What a connected peer will see
 func showConnectedUI(myWindow fyne.Window) {
 	thankLabel := widget.NewLabel("Connected to Host!")
 	DisplayDeck := widget.NewButton("Display Current Deck", func() {
@@ -81,6 +95,12 @@ func showConnectedUI(myWindow fyne.Window) {
 	myWindow.SetContent(container.NewVBox(thankLabel, DisplayDeck))
 }
 
-func tidyUp() {
-	fmt.Println("Exited")
+func showCardUI(givenWindow fyne.Window) {
+	image := canvas.NewImageFromFile("media/svg_playing_cards/fronts/spades_ace.svg")
+	image.FillMode = canvas.ImageFillOriginal
+	image.Resize(fyne.NewSize(image.Size().Width/2, image.Size().Height/2))
+
+	// Set the image to be the window's content
+	container := container.NewCenter(image)
+	givenWindow.SetContent(container)
 }
