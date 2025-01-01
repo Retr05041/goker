@@ -7,8 +7,8 @@ import (
 	"strings"
 )
 
-var ranks = [...]string{"ACE", "TWO", "THREE", "FOUR", "FIVE", "SIX", "SEVEN", "EIGHT", "NINE", "TEN", "JACK", "QUEEN", "KING"}
-var suits = [...]string{"HEARTS", "DIAMONDS", "CLUBS", "SPADES"}
+var ranks = [...]string{"ace", "2", "3", "4", "5", "6", "7", "8", "9", "10", "jack", "queen", "king"}
+var suits = [...]string{"hearts", "diamonds", "clubs", "spades"}
 
 // Creates new reference deck 
 func (g *GameInfo) GenerateRefDeck(key string) {
@@ -17,7 +17,7 @@ func (g *GameInfo) GenerateRefDeck(key string) {
 	count := 0
 	for _, suit := range suits {
 		for _, rank := range ranks {
-			cardName := rank + " " + suit
+			cardName := suit + "_" + rank
 			cardHash := generateCardHash(cardName, key)
 
 			newRefDeck[cardName] = cardHash
@@ -34,7 +34,7 @@ func (g *GameInfo) GenerateRoundDeck(key string) {
 	index := 0
 	for _, suit := range suits {
 		for _, rank := range ranks {
-			cardName := rank + " " + suit
+			cardName := suit + "_" + rank
 			cardHash := generateCardHash(cardName, key)
 			newDeck = append(newDeck, Card{index: index, Cardvalue: cardHash})
 			index++

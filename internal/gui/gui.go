@@ -14,13 +14,14 @@ import (
 func Init() {
 	// Setup myself
 	myself = new(p2p.GokerPeer)
-
+	// Setup hand
+	myHand = make(map[string]*canvas.Image, 2)
 	// Setup GUI
 	myApp := app.New()
 	myWindow := myApp.NewWindow("Goker")
 
 	// Setup Main Menu
-	showCardUI(myWindow)
+	showGameScreen(myWindow)
 
 	// Run GUI
 	myWindow.Resize(fyne.NewSize(float32(MAX_WIDTH), float32(MAX_HEIGHT))) // Set the window size
@@ -95,12 +96,32 @@ func showConnectedUI(myWindow fyne.Window) {
 	myWindow.SetContent(container.NewVBox(thankLabel, DisplayDeck))
 }
 
-func showCardUI(givenWindow fyne.Window) {
-	image := canvas.NewImageFromFile("media/svg_playing_cards/fronts/spades_ace.svg")
-	image.FillMode = canvas.ImageFillOriginal
-	image.Resize(fyne.NewSize(image.Size().Width/2, image.Size().Height/2))
+func showGameScreen(givenWindow fyne.Window) {
+	// Call setupCards to initialize the playingCards map
+	loadCard("spades_ace")
+	loadCard("hearts_ace")
 
-	// Set the image to be the window's content
-	container := container.NewCenter(image)
-	givenWindow.SetContent(container)
+	// Create a container to hold all the card images in a grid
+	grid := container.NewGridWithColumns(2) // Adjust the number of columns as desired
+
+	// Add each card image to the grid
+	for _, cardImage := range myHand {
+		grid.Add(cardImage)
+	}
+
+	foldButton := widget.NewButton("Fold", func() {
+		fmt.Println("Fold was pressed")
+	})
+	raiseButton := widget.NewButton("Raise", func() {
+		fmt.Println("Raise was pressed")
+	})
+	callButton := widget.NewButton("Call", func() {
+		fmt.Println("Call was pressed")
+	})
+	checkButton := widget.NewButton("Check", func() {
+		fmt.Println("Check was pressed")
+	})
+
+	// Center the grid in the window
+	givenWindow.SetContent(container.NewCenter(container.NewHBox(grid, container.NewVBox(foldButton, raiseButton, callButton, checkButton))))
 }
