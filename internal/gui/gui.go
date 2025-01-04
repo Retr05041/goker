@@ -13,8 +13,6 @@ import (
 var (
 	// Myself
 	myself *p2p.GokerPeer
-	// Main Window of gui
-	mainWindow fyne.Window
 
 	myHand map[string]*canvas.Image
 	ranks  = [...]string{"ace", "2", "3", "4", "5", "6", "7", "8", "9", "10", "jack", "queen", "king"}
@@ -35,10 +33,10 @@ func Init() {
 	myHand = make(map[string]*canvas.Image, 2)
 	// Setup GUI
 	myApp := app.New()
-	mainWindow = myApp.NewWindow("Goker")
+	mainWindow := myApp.NewWindow("Goker")
 
 	// Make sure scenes are prepped
-	//setElements()
+	showGameScreen(mainWindow)
 
 	// Run GUI
 	mainWindow.Resize(fyne.NewSize(float32(MAX_WIDTH), float32(MAX_HEIGHT))) // Set the window size
