@@ -4,12 +4,14 @@ import (
 	"fmt"
 
 	"goker/internal/p2p"
+
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/widget"
-	"fyne.io/fyne/v2/canvas"
 )
 
+// Main Menu
 func showMenuUI(givenWindow fyne.Window) {
 	var hostOrConnect string
 
@@ -84,7 +86,12 @@ func showConnectedUI(myWindow fyne.Window) {
 		container.NewVBox(thankLabel))
 }
 
+// Main game screen
 func showGameScreen(givenWindow fyne.Window) {
+	// Create a container to hold all the card images in a grid
+	handGrid := container.NewGridWithColumns(2) // Adjust the number of columns as desired
+	boardGrid := container.NewGridWithColumns(5) // Adjust the number of columns as desired
+
 	foldButton := widget.NewButton("Fold", func() {
 		fmt.Println("Fold was pressed")
 	})
@@ -96,22 +103,35 @@ func showGameScreen(givenWindow fyne.Window) {
 	})
 	checkButton := widget.NewButton("Check", func() {
 		fmt.Println("Check was pressed")
+		loadHand("hearts_ace", "spades_ace")
+		handGrid.Objects = nil
+		for _, image := range myHand {
+			handGrid.Add(image)
+		}
+		handGrid.Refresh()
 	})
 
-	// Call setupCards to initialize the playingCards map
-	loadCard("spades_ace")
-	loadCard("hearts_ace")
 
-	// Create a container to hold all the card images in a grid
-	grid := container.NewGridWithColumns(2) // Adjust the number of columns as desired
-
-	// Add each card image to the grid
-	for _, cardImage := range myHand {
-		grid.Add(cardImage)
+	// Base hand (empty)
+	for _, image := range myHand {
+		handGrid.Add(image)
 	}
 
-	// Center the grid in the window
+	// Base board (empty)
+	for _, image := range theBoard {
+		boardGrid.Add(image)
+	}
+
 	givenWindow.SetContent(
 		container.NewCenter(
-			container.NewHBox(grid, container.NewVBox(foldButton, raiseButton, callButton, checkButton))))
+			container.NewVBox(
+			boardGrid,
+			container.NewPadded(
+				container.NewCenter(
+					container.NewHBox(
+							handGrid, 
+							container.NewCenter(
+								container.NewHBox(
+									container.NewVBox(foldButton, raiseButton), 
+									container.NewVBox(callButton, checkButton)))))))))
 }
