@@ -175,6 +175,8 @@ NO NEED TO SHUFFLE ONCE DURING SECOND ROUND OF ENCRYPTION
 i.e. Don't link r's to cards until I have gotten the shuffled deck
 
 
-
+Next steps: Create a "Peer" Struct that will hold all necessary info for each peer for GUI
+- Replace current "peerList" ?
+- Needs a "nickname", multiaddress (for connection stuff), ...?
 
 
