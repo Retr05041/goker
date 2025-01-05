@@ -88,50 +88,54 @@ func showConnectedUI(myWindow fyne.Window) {
 
 // Main game screen
 func showGameScreen(givenWindow fyne.Window) {
-	// Create a container to hold all the card images in a grid
-	handGrid := container.NewGridWithColumns(2) // Adjust the number of columns as desired
-	boardGrid := container.NewGridWithColumns(5) // Adjust the number of columns as desired
+	potLabel := widget.NewLabel(fmt.Sprintf("Pot: %.0f", pot))
+	moneyLabel := widget.NewLabel(fmt.Sprintf("My Money: %.0f", myMoney))
+	valueLabel := widget.NewLabel(fmt.Sprintf("Value: %.0f", minBet))
+	betSlider := widget.NewSlider(minBet, myMoney)
+	betSlider.Step = 1
+	betSlider.OnChanged = func(f float64) {
+		valueLabel.SetText(fmt.Sprintf("Value: %.0f", f))
+	}
 
 	foldButton := widget.NewButton("Fold", func() {
 		fmt.Println("Fold was pressed")
 	})
 	raiseButton := widget.NewButton("Raise", func() {
 		fmt.Println("Raise was pressed")
+		if myMoney - betSlider.Value < 0 {
+			fyne.CurrentApp().SendNotification(fyne.NewNotification("Warning", "Not enough funds to place this bet!"))
+			betSlider.SetValue(myMoney)
+		} else {
+			myMoney -= betSlider.Value
+			pot += betSlider.Value
+			moneyLabel.SetText(fmt.Sprintf("My Money: %.0f", myMoney))
+			moneyLabel.Refresh()
+			potLabel.SetText(fmt.Sprintf("Pot: %.0f", pot))
+			potLabel.Refresh()
+		}
 	})
 	callButton := widget.NewButton("Call", func() {
 		fmt.Println("Call was pressed")
 	})
 	checkButton := widget.NewButton("Check", func() {
 		fmt.Println("Check was pressed")
-		loadHand("hearts_ace", "spades_ace")
-		handGrid.Objects = nil
-		for _, image := range myHand {
-			handGrid.Add(image)
-		}
-		handGrid.Refresh()
 	})
-
-
-	// Base hand (empty)
-	for _, image := range myHand {
-		handGrid.Add(image)
-	}
-
-	// Base board (empty)
-	for _, image := range theBoard {
-		boardGrid.Add(image)
-	}
 
 	givenWindow.SetContent(
 		container.NewCenter(
 			container.NewVBox(
+			container.NewCenter(potLabel),
 			boardGrid,
 			container.NewPadded(
 				container.NewCenter(
-					container.NewHBox(
-							handGrid, 
-							container.NewCenter(
-								container.NewHBox(
-									container.NewVBox(foldButton, raiseButton), 
-									container.NewVBox(callButton, checkButton)))))))))
+					container.NewVBox(
+						container.NewCenter(moneyLabel),
+						container.NewHBox(
+								handGrid, 
+								container.NewVBox(
+									foldButton, 
+									callButton, 
+									container.NewHBox(raiseButton, valueLabel), 
+									betSlider),
+								checkButton)))))))
 }
