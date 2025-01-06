@@ -2,7 +2,6 @@ package p2p
 
 import (
 	"fmt"
-	"goker/internal/game"
 	"goker/internal/sra"
 	"log"
 	"sync"
@@ -14,25 +13,23 @@ import (
 )
 
 type GokerPeer struct {
-	// Network info
-	thisHost          host.Host // This host
-	ThisHostMultiaddr string    // This hosts multiaddress
-
-	sessionHost peer.ID // Host of the current network (This will change has hosts drop out, but will be used to request specific things)
-
-	peerList      map[peer.ID]multiaddr.Multiaddr // A map for managing peer connections
-	peerListMutex sync.Mutex                      // Mutex for accessing peer map
+	// Network logic
+	thisHost          host.Host                       // This host
+	ThisHostMultiaddr string                          // This hosts multiaddress
+	sessionHost       peer.ID                         // Host of the current network (This will change has hosts drop out, but will be used to request specific things)
+	peerList          map[peer.ID]multiaddr.Multiaddr // A map for managing peer connections
+	peerListMutex     sync.Mutex                      // Mutex for accessing peer map
 
 	// Other
-	gameInfo *game.GameInfo // Holds all game info (cards, deck operations etc.)
-	keyring  *sra.Keyring   // Pointer to global keyring being used in the game
+	deck    *deckInfo    // Holds all deck logic (cards, deck operations etc.)
+	keyring *sra.Keyring // Holds all encryption logic
 }
 
 func (p *GokerPeer) Init(hosting bool, givenAddr string) {
 	p.keyring = new(sra.Keyring)
-	p.gameInfo = new(game.GameInfo)
-	p.gameInfo.GenerateRefDeck("mysupersecretkey")
-	p.gameInfo.GenerateRoundDeck("mysupersecretkey")
+	p.deck = new(deckInfo)
+	p.deck.GenerateRefDeck("mysupersecretkey")
+	p.deck.GenerateRoundDeck("mysupersecretkey")
 
 	// Create a new libp2p Host
 	h, err := libp2p.New()
