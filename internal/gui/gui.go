@@ -8,7 +8,6 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/canvas"
-	"fyne.io/fyne/v2/widget"
 )
 
 var (
@@ -32,14 +31,11 @@ func Init() {
 	// Listen for updated from GameManager
 	go gmListener()
 
-	// Request the hand and board be initialised
-	fmt.Println("Requesting Hand and Deck")
+	// Init everything on the GM side
 	channelmanager.ActionChannel <- channelmanager.ActionType{
-		Action: "InitH&D",
+		Action: "Init",
 		Data: nil,
 	}
-	fmt.Println("Got hand and deck")
-
 
 	// Run the first scene
 	showGameScreen(mainWindow)
@@ -83,11 +79,11 @@ func updateBoardImages(board []*canvas.Image) {
 }
 
 func updatePot(pot float64) {
-	potLabel = widget.NewLabel(fmt.Sprintf("Pot: %.0f", pot))
+	potLabel.SetText(fmt.Sprintf("Pot: %.0f", pot))
 	potLabel.Refresh()
 }
 
 func updateMyMoney(money float64) {
-	moneyLabel = widget.NewLabel(fmt.Sprintf("My Money: %.0f", money))
+	moneyLabel.SetText(fmt.Sprintf("My Money: %.0f", money))
 	moneyLabel.Refresh()
 }
