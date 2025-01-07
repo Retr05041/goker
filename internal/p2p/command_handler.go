@@ -1,17 +1,13 @@
 package p2p
 
 import (
-	"bufio"
 	"context"
 	"fmt"
-	"goker/internal/sra"
 	"io"
 	"log"
-	"math/big"
 	"strings"
 
 	"github.com/libp2p/go-libp2p/core/network"
-	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 type Command interface {
@@ -29,55 +25,7 @@ func (p *GokerPeer) RespondToCommand(command Command, stream network.Stream) {
 	command.Respond(p, stream)
 }
 
-// PingCommand struct inheriting from the Command Interface - For sending pings
-type PingCommand struct{}
-
-// Execute sends a ping command to all peers in the peer list
-func (p *PingCommand) Execute(peer *GokerPeer) {
-	peer.peerListMutex.Lock()
-	defer peer.peerListMutex.Unlock()
-
-	for peerID := range peer.peerList {
-		if peerID == peer.thisHost.ID() {
-			continue // Skip self
-		}
-
-		// Create a new stream to the peer
-		stream, err := peer.thisHost.NewStream(context.Background(), peerID, protocolID)
-		if err != nil {
-			log.Printf("PingCommand: Failed to create stream to peer %s: %v\n", peerID, err)
-			continue
-		}
-		defer stream.Close()
-
-		// Send the "ping"
-		_, err = stream.Write([]byte("CMDping\n"))
-		if err != nil {
-			log.Printf("PingCommand: Failed to send ping to peer %s: %v\n", peerID, err)
-		} else {
-			fmt.Printf("PingCommand: Sent ping to peer %s\n", peerID)
-		}
-
-		// Read the response - we do this as they won't be sending an actual *command* back, just some text
-		reader := bufio.NewReader(stream)
-		response, err := reader.ReadString('\n')
-		if err != nil {
-			log.Printf("PingCommand: Failed to read response from peer %s: %v\n", peerID, err)
-		} else {
-			fmt.Printf("PingCommand: Received response from peer %s: %s\n", peerID, strings.TrimSpace(response))
-		}
-	}
-}
-
-// Response for a ping command being sent to this host - Response with a Pong! - Notice how we are not sending another command back, just text
-func (p *PingCommand) Respond(peer *GokerPeer, sendingStream network.Stream) {
-	_, err := sendingStream.Write([]byte("Pong!\n"))
-	if err != nil {
-		log.Printf("PingResponse: Failed to send ping to peer %s: %v", sendingStream.Conn().RemotePeer(), err)
-	} else {
-		fmt.Printf("PingResponse: Sent pong to peer %s", sendingStream.Conn().RemotePeer())
-	}
-}
+/////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // Request the shared P and Q every peer should have in the network - all peers will request this from the host each round
 type PQRequestCommand struct{}
@@ -91,7 +39,7 @@ func (pq *PQRequestCommand) Execute(peer *GokerPeer) {
 	}
 	defer stream.Close()
 
-	_, err = stream.Write([]byte("CMDpqrequest\n"))
+	_, err = stream.Write([]byte("CMDpqrequest\n\\END\n"))
 	if err != nil {
 		log.Printf("PQRequest: Failed to send command to host %s: %v\n", peer.sessionHost, err)
 	} else {
@@ -115,134 +63,124 @@ func (pq *PQRequestCommand) Respond(peer *GokerPeer, sendingStream network.Strea
 	PQData := peer.keyring.GetPQString()
 	_, err := sendingStream.Write([]byte(PQData))
 	if err != nil {
-		log.Printf("PQRequestResponse: Failed to send PQ to peer %s: %v", sendingStream.Conn().RemotePeer(), err)
+		log.Printf("PQRequestResponse: Failed to send PQ to peer %s: %v\n", sendingStream.Conn().RemotePeer(), err)
 	} else {
-		fmt.Printf("PQRequestResponse: Sent PQ to peer %s", sendingStream.Conn().RemotePeer())
+		fmt.Printf("PQRequestResponse: Sent PQ to peer %s\n", sendingStream.Conn().RemotePeer())
 	}
 }
 
-// Testing function - This will take a message, and send to each peer for encryption and decryption
-type TestEncryptionCommand struct {
-	Message string
-}
+// / ### PROTOCOL ###
+type ProtocolFirstStep struct{}
 
-// Execute sends the message to all peers for encryption and ensures commutative encryption correctness.
-func (t *TestEncryptionCommand) Execute(peer *GokerPeer) {
+// Send deck to every peer, allow them to shuffle and encrypt the deck
+func (sp *ProtocolFirstStep) Execute(peer *GokerPeer) {
+	peer.EncryptAllWithGlobalKeys()
+	peer.deck.ShuffleRoundDeck()
+
 	peer.peerListMutex.Lock()
 	defer peer.peerListMutex.Unlock()
 
-	// Hash the original message
-	originalMessage := sra.HashMessage(t.Message)
-
-	fmt.Printf("Original message hash: %s\n", originalMessage.String())
-
-	currentMessage := peer.keyring.EncryptWithGlobalKeys(originalMessage)
-	fmt.Printf("Host-encrypted hash: %s\n", currentMessage.String())
-
-	// Encrypt the message with each peer
 	for peerID := range peer.peerList {
 		if peerID == peer.thisHost.ID() {
-			continue // Skip self
+			continue
 		}
 
-		// Send the message to the peer for encryption
-		encryptedMessage, err := sendForEncryption(peer, peerID, currentMessage)
+		// Create a new stream to the peer
+		stream, err := peer.thisHost.NewStream(context.Background(), peerID, protocolID)
 		if err != nil {
-			log.Printf("Failed to encrypt message with peer %s: %v\n", peerID, err)
-			return
+			log.Printf("ProtocolFirstStep: Failed to create stream to peer %s: %v\n", peerID, err)
+			continue
 		}
-		fmt.Printf("Message after encryption by peer %s: %s\n", peerID, encryptedMessage.String())
-		currentMessage = encryptedMessage
+		defer stream.Close()
+
+		// Send the deck
+		_, err = stream.Write([]byte(fmt.Sprintf("CMDprotocolFS %s\n\\END\n", peer.deck.GenerateDeckPayload())))
+		if err != nil {
+			log.Printf("ProtocolFirstStep: Failed to send deck to peer %s: %v\n", peerID, err)
+		} else {
+			fmt.Printf("ProtocolFirstStep: Sent deck to peer %s\n", peerID)
+		}
+
+		// Get the response (the new deck)
+		responseBytes, err := io.ReadAll(stream)
+		if err != nil {
+			log.Printf("ProtocolFirstStep: Failed to read response from host %s: %v\n", peer.sessionHost, err)
+		} else {
+			peer.deck.SetDeck(string(responseBytes))
+			fmt.Printf("ProtocolFirstStep: Received response from peer %s\n", peerID)
+		}
+
 	}
+}
 
-	// Remove my encryption (to test commutativity)
-	currentMessage = peer.keyring.DecryptWithGlobalKeys(currentMessage)
-	fmt.Printf("Host-decrypted hash: %s\n", currentMessage.String())
+// Respond to a protocol's first command - Encrypt with global keys, shuffle, then send back - when this is called a new deck should be set already
+func (sp *ProtocolFirstStep) Respond(peer *GokerPeer, sendingStream network.Stream) {
+	// Encrypt the deck with your global keys, shuffle it, then create a new payload to send back
+	peer.EncryptAllWithGlobalKeys()
+	peer.deck.ShuffleRoundDeck()
+	processedDeck := peer.deck.GenerateDeckPayload()
 
-	// Decrypt the message with each peer in reverse order
+	// Send the updated deck back to the sender
+	_, err := sendingStream.Write([]byte(fmt.Sprintf("%s\\END\n", processedDeck)))
+	if err != nil {
+		log.Printf("StartProtocol Respond: Failed to send response: %v\n", err)
+	}
+}
+
+type ProtocolSecondStep struct{}
+
+// For getting others to encrypt with their variation keys
+func (sp *ProtocolSecondStep) Execute(peer *GokerPeer) {
+	// First, the host of the game (the one initialing the protocols steps) will encrypt with variations
+	peer.DecryptAllWithGlobalKeys() // Decrypt global keys
+	peer.EncryptAllWithVariation() // Add encryption to every card
+
+	// Time to get the peers to do the same
+	peer.peerListMutex.Lock()
+	defer peer.peerListMutex.Unlock()
+
 	for peerID := range peer.peerList {
 		if peerID == peer.thisHost.ID() {
-			continue // Skip self
+			continue
 		}
 
-		// Send the message to the peer for decryption
-		decryptedMessage, err := sendForDecryption(peer, peerID, currentMessage)
+		// Create a new stream to the peer
+		stream, err := peer.thisHost.NewStream(context.Background(), peerID, protocolID)
 		if err != nil {
-			log.Printf("Failed to decrypt message with peer %s: %v\n", peerID, err)
-			return
+			log.Printf("ProtocolSecondStep: Failed to create stream to peer %s: %v\n", peerID, err)
+			continue
 		}
-		fmt.Printf("Message after decryption by peer %s: %s\n", peerID, decryptedMessage.String())
-		currentMessage = decryptedMessage
-	}
+		defer stream.Close()
 
-	// Check if the final decrypted message matches the original
-	if currentMessage.Cmp(originalMessage) == 0 {
-		fmt.Println("Test passed: Original and decrypted messages match.")
-	} else {
-		fmt.Printf("Test failed: Original message %s and decrypted message %s do not match.\n",
-			originalMessage.String(), currentMessage.String())
+		// Send the deck
+		_, err = stream.Write([]byte(fmt.Sprintf("CMDprotocolSS %s\n\\END\n", peer.deck.GenerateDeckPayload())))
+		if err != nil {
+			log.Printf("ProtocolSecondStep: Failed to send deck to peer %s: %v\n", peerID, err)
+		} else {
+			fmt.Printf("ProtocolSecondStep: Sent deck to peer %s\n", peerID)
+		}
+
+		// Get the response (the new deck)
+		responseBytes, err := io.ReadAll(stream)
+		if err != nil {
+			log.Printf("ProtocolSecondStep: Failed to read response from host %s: %v\n", peer.sessionHost, err)
+		} else {
+			peer.deck.SetDeck(string(responseBytes)) // Setting the deck without changing it as no shuffling was done
+			fmt.Printf("ProtocolSecondStep: Received response from peer %s\n", peerID)
+		}
 	}
 }
 
-// Respond not implemented for this command as it's not invoked remotely.
-func (t *TestEncryptionCommand) Respond(peer *GokerPeer, stream network.Stream) {
-	// Not needed for this test command
+// Respond to the protocols second command - Decrypt global keys, encrypt with variation, then send back- when this is called a new deck should be set already
+func (sp *ProtocolSecondStep) Respond(peer *GokerPeer, sendingStream network.Stream) {
+	peer.DecryptAllWithGlobalKeys()
+	peer.EncryptAllWithVariation()
+	processedDeck := peer.deck.GenerateDeckPayload()
+
+	// Send the updated deck back to the sender
+	_, err := sendingStream.Write([]byte(fmt.Sprintf("%s\\END\n", processedDeck)))
+	if err != nil {
+		log.Printf("StartProtocol Respond: Failed to send response: %v\n", err)
+	}
 }
 
-// Helper function for test
-func sendForEncryption(peer *GokerPeer, peerID peer.ID, message *big.Int) (*big.Int, error) {
-	// Open a new stream to the peer
-	stream, err := peer.thisHost.NewStream(context.Background(), peerID, protocolID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create stream: %v", err)
-	}
-	defer stream.Close()
-
-	// Send the "ENCRYPT" command along with the message
-	_, err = stream.Write([]byte(fmt.Sprintf("CMDencrypt %s\n", message.String())))
-	if err != nil {
-		return nil, fmt.Errorf("failed to send encryption command: %v", err)
-	}
-
-	// Read the response
-	reader := bufio.NewReader(stream)
-	response, err := reader.ReadString('\n')
-	if err != nil {
-		return nil, fmt.Errorf("failed to read encryption response: %v", err)
-	}
-	response = strings.TrimSpace(response)
-
-	// Parse the encrypted message
-	encryptedMessage := new(big.Int)
-	encryptedMessage.SetString(response, 10)
-	return encryptedMessage, nil
-}
-
-// Helper function for test
-func sendForDecryption(peer *GokerPeer, peerID peer.ID, message *big.Int) (*big.Int, error) {
-	// Open a new stream to the peer
-	stream, err := peer.thisHost.NewStream(context.Background(), peerID, protocolID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create stream: %v", err)
-	}
-	defer stream.Close()
-
-	// Send the "DECRYPT" command along with the message
-	_, err = stream.Write([]byte(fmt.Sprintf("CMDdecrypt %s\n", message.String())))
-	if err != nil {
-		return nil, fmt.Errorf("failed to send decryption command: %v", err)
-	}
-
-	// Read the response
-	reader := bufio.NewReader(stream)
-	response, err := reader.ReadString('\n')
-	if err != nil {
-		return nil, fmt.Errorf("failed to read decryption response: %v", err)
-	}
-	response = strings.TrimSpace(response)
-
-	// Parse the decrypted message
-	decryptedMessage := new(big.Int)
-	decryptedMessage.SetString(response, 10)
-	return decryptedMessage, nil
-}

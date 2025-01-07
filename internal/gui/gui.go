@@ -2,81 +2,88 @@ package gui
 
 import (
 	"fmt"
-	"goker/internal/p2p"
+	"goker/internal/channelmanager"
+	"image/color"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
-	"fyne.io/fyne/v2/container"
-	"fyne.io/fyne/v2/widget"
+	"fyne.io/fyne/v2/canvas"
 )
 
-var myself *p2p.GokerPeer
+var (
+	// GUI Settings
+	MAX_WIDTH  = 600
+	MAX_HEIGHT = 400
 
+	// Colors
+	BLUE = color.NRGBA{R: 0, G: 173, B: 216, A: 255}
+)
+
+// Runner for gui
 func Init() {
-	myself = new(p2p.GokerPeer) // Need to initialise myself so I can use it
-
+	// Setup GUI
 	myApp := app.New()
-	myWindow := myApp.NewWindow("Choice Widgets")
+	mainWindow := myApp.NewWindow("Goker")
 
-	var choice string
+	// Init all scene elements
+	initElements()
 
-	inputedAddress := widget.NewEntry()
-	inputedAddress.SetPlaceHolder("Host address...")
-	inputedAddress.Disable()
+	// Listen for updated from GameManager
+	go gmListener()
 
-	submit := widget.NewButton("Submit", func() {
-		fmt.Println("Choice made: ", choice)
-		if choice == "Connect" {
-			go myself.Init(false, inputedAddress.Text)
-			showConnectedUI(myWindow)
-		} else if choice == "Host" {
-			go myself.Init(true, "")
-			showHostUI(myWindow)
+	// Init everything on the GM side
+	channelmanager.ActionChannel <- channelmanager.ActionType{
+		Action: "Init",
+		Data: nil,
+	}
+
+	// Run the first scene
+	showGameScreen(mainWindow)
+
+	// Run GUI
+	mainWindow.Resize(fyne.NewSize(float32(MAX_WIDTH), float32(MAX_HEIGHT))) // Set the window size
+	mainWindow.ShowAndRun()
+}
+
+func gmListener() {
+	for {
+		select {
+		case hand := <-channelmanager.HandChannel: // Hand = whatever is coming in from the handChannel
+			updateHandImages(hand)
+		case board := <-channelmanager.BoardChannel:
+			updateBoardImages(board)
+		case pot := <-channelmanager.PotChannel:
+			updatePot(pot)
+		case money := <-channelmanager.MyMoneyChannel:
+			updateMyMoney(money)
 		}
-	})
-	submit.Disable()
-
-	peerType := widget.NewRadioGroup([]string{"Host", "Connect"}, func(value string) {
-		submit.Enable()
-		if value == "Connect" {
-			inputedAddress.Enable()
-		} else {
-			inputedAddress.Disable()
-		}
-		choice = value
-	})
-
-	menuContent := container.NewGridWrap(fyne.NewSize(300, 200), container.NewVBox(peerType, inputedAddress, submit))
-	myWindow.SetContent(container.NewCenter(menuContent))
-	myWindow.Show()
-	myApp.Run()
-	tidyUp()
+	}
 }
 
-func showHostUI(myWindow fyne.Window) {
-	copyAddrButton := widget.NewButton("Copy server address", func() {
-		myWindow.Clipboard().SetContent(myself.ThisHostMultiaddr)
-	})
-	pingButton := widget.NewButton("Ping All Peers", func() {
-		myself.ExecuteCommand(&p2p.PingCommand{})
-		fmt.Println("Ping command sent to all peers.")
-	})
-	testEncryptionButton := widget.NewButton("Test Commutative Encryption", func() {
-		myself.ExecuteCommand(&p2p.TestEncryptionCommand{Message: "Hello, World."})
-		fmt.Println("Testing encryption done on all peers.")
-	})
-	myWindow.SetContent(container.NewVBox(copyAddrButton, pingButton, testEncryptionButton))
+func updateHandImages(hand []*canvas.Image) {
+	fmt.Println("Updating Hand Images")
+	handGrid.Objects = nil
+	for _, image := range hand {
+		handGrid.Add(image)
+	}
+	handGrid.Refresh()
 }
 
-func showConnectedUI(myWindow fyne.Window) {
-	thankLabel := widget.NewLabel("Connected to Host!")
-	pingButton := widget.NewButton("Ping All Peers", func() {
-		myself.ExecuteCommand(&p2p.PingCommand{})
-		fmt.Println("Ping command sent to all peers.")
-	})
-	myWindow.SetContent(container.NewVBox(thankLabel, pingButton))
+func updateBoardImages(board []*canvas.Image) {
+	fmt.Println("Updating Board Images")
+	boardGrid.Objects = nil
+	for _, image := range board {
+		boardGrid.Add(image)
+	}
+	boardGrid.Refresh()
 }
 
-func tidyUp() {
-	fmt.Println("Exited")
+func updatePot(pot float64) {
+	potLabel.SetText(fmt.Sprintf("Pot: %.0f", pot))
+	potLabel.Refresh()
+}
+
+func updateMyMoney(money float64) {
+	moneyLabel.SetText(fmt.Sprintf("My Money: %.0f", money))
+	moneyLabel.Refresh()
 }

@@ -1,9 +1,8 @@
 package main
 
-import (
-	"goker/internal/gui"
-)
+import "goker/internal/gamemanager"
 
 func main() {
-	gui.Init()
+	manager := new(gamemanager.GameManager)
+	manager.StartGame(nil)
 }

@@ -85,6 +85,7 @@ func modInverse(a, m *big.Int) (*big.Int, error) {
 
 // Key generation - returns: private key, public key, modulus
 // The given p and q are two large primes the players have agreed on - this will create keys that are commutative
+// This function also sets the needed 52 Variation keys
 func (k *Keyring) GenerateKeys() error {
 	if k.sharedP == nil || k.sharedQ == nil {
 		return fmt.Errorf("P and Q not set.")
@@ -109,6 +110,7 @@ func (k *Keyring) GenerateKeys() error {
 	}
 
 	k.globalPrivateKey, k.globalPublicKey, k.globalN, k.globalPHI = privateKey, publicKey, n, phi
+	k.GenerateKeyVariations(52) // We need to create variations each round, so we will do this on Generate Keys
 	return nil
 }
 
