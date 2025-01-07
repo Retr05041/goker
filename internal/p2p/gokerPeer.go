@@ -73,5 +73,31 @@ func (p *GokerPeer) Init(hosting bool, givenAddr string) {
 }
 
 func (g *GokerPeer) DisplayDeck() {
-	g.gameInfo.DisplayDeck()
+	g.deck.DisplayDeck()
+}
+
+// Decrypt deck with global keys
+func (p *GokerPeer) DecryptAllWithGlobalKeys() {
+	for _, card := range p.deck.RoundDeck {
+		card.Cardvalue = p.keyring.DecryptWithGlobalKeys(card.Cardvalue)
+	}
+}
+
+// Encrypt deck with global keys
+func (p *GokerPeer) EncryptAllWithGlobalKeys() {
+	for _, card := range p.deck.RoundDeck {
+		card.Cardvalue = p.keyring.EncryptWithGlobalKeys(card.Cardvalue)
+	}
+}
+
+// Encrypt deck with variation numbers
+func (p *GokerPeer) EncryptAllWithVariation() {
+	for i, card := range p.deck.RoundDeck {
+		encryptedCard, err := p.keyring.EncryptWithVariation(card.Cardvalue, i)
+		if err != nil {
+			log.Println(err)
+		}
+		p.deck.RoundDeck[i].Cardvalue = encryptedCard
+		p.deck.RoundDeck[i].VariationIndex = i
+	}
 }

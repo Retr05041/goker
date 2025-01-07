@@ -109,11 +109,11 @@ func (p *GokerPeer) handleStream(stream network.Stream) {
 		p.RespondToCommand(&PQRequestCommand{}, stream)
 	case "CMDprotocolFS": // First step of Protocol
 		fmt.Println("Recieved protocols first step command")
-		p.gameInfo.SetDeck(payload)
+		p.deck.SetDeck(payload)
 		p.RespondToCommand(&ProtocolFirstStep{}, stream)
 	case "CMDprotocolSS": // Second step of Protocol
 		fmt.Println("Recieved protocols second step command")
-		p.gameInfo.SetDeck(payload)
+		p.deck.SetDeck(payload)
 		p.RespondToCommand(&ProtocolFirstStep{}, stream)
 	default:
 		log.Printf("Unknown Response Recieved: %s\n", cleanedMessage)

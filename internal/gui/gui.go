@@ -1,33 +1,17 @@
 package gui
 
 import (
-	"goker/internal/p2p"
+	"fmt"
+	"goker/internal/channelmanager"
 	"image/color"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/canvas"
-	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/widget"
 )
 
 var (
-	// Info about the user
-	myself *p2p.GokerPeer
-	myMoney float64
-
-	// Table Info
-	pot float64
-	minBet float64
-
-	// Card Variables
-	myHand []*canvas.Image // Images for the cards in my hand
-	theBoard []*canvas.Image // Images for the cards in the board
-	handGrid = container.NewGridWithColumns(2) // Holds the hand images
-	boardGrid = container.NewGridWithColumns(5) // Holds the board iamges
-
-	ranks = [...]string{"ace", "2", "3", "4", "5", "6", "7", "8", "9", "10", "jack", "queen", "king"}
-	suits = [...]string{"hearts", "diamonds", "clubs", "spades"}
-
 	// GUI Settings
 	MAX_WIDTH  = 600
 	MAX_HEIGHT = 400
@@ -38,21 +22,26 @@ var (
 
 // Runner for gui
 func Init() {
-	// Setup myself
-	myself = new(p2p.GokerPeer)
-	myMoney = 100.0
-	minBet = 5.0
-	pot = 0.0
-
 	// Setup GUI
 	myApp := app.New()
 	mainWindow := myApp.NewWindow("Goker")
 
-	// Setup hand
-	initHand()
-	initBoard()
+	// Init all scene elements
+	initElements()
 
-	// Make sure scenes are prepped
+	// Listen for updated from GameManager
+	go gmListener()
+
+	// Request the hand and board be initialised
+	fmt.Println("Requesting Hand and Deck")
+	channelmanager.ActionChannel <- channelmanager.ActionType{
+		Action: "InitH&D",
+		Data: nil,
+	}
+	fmt.Println("Got hand and deck")
+
+
+	// Run the first scene
 	showGameScreen(mainWindow)
 
 	// Run GUI
@@ -60,98 +49,45 @@ func Init() {
 	mainWindow.ShowAndRun()
 }
 
-// ### SIMPLE HAND MANIPULATION FUNCTIONS ###
-
-// Setup hand with back of cards
-func initHand() {
-	for i := 0; i < 2; i++ {
-		cardImage := canvas.NewImageFromFile("media/svg_playing_cards/backs/png_96_dpi/red.png")
-		cardImage.FillMode = canvas.ImageFillOriginal
-
-		myHand = append(myHand, cardImage)
-	}
-
-	for _, image := range myHand {
-		handGrid.Add(image)
-	}
-}
-
-// Setup board with back of cards
-func initBoard() {
-	for i := 0; i < 5; i++ {
-		cardImage := canvas.NewImageFromFile("media/svg_playing_cards/backs/png_96_dpi/red.png")
-		cardImage.FillMode = canvas.ImageFillOriginal
-
-		theBoard = append(theBoard, cardImage)
-	}
-
-	for _, image := range theBoard {
-		boardGrid.Add(image)
+func gmListener() {
+	for {
+		select {
+		case hand := <-channelmanager.HandChannel: // Hand = whatever is coming in from the handChannel
+			updateHandImages(hand)
+		case board := <-channelmanager.BoardChannel:
+			updateBoardImages(board)
+		case pot := <-channelmanager.PotChannel:
+			updatePot(pot)
+		case money := <-channelmanager.MyMoneyChannel:
+			updateMyMoney(money)
+		}
 	}
 }
 
-// Load two cards into your hand and update the grid
-func loadHand(cardOneName, cardTwoName string) {
-	cardOne := canvas.NewImageFromFile("media/svg_playing_cards/fronts/png_96_dpi/" + cardOneName + ".png")
-	cardOne.FillMode = canvas.ImageFillOriginal
-
-	cardTwo := canvas.NewImageFromFile("media/svg_playing_cards/fronts/png_96_dpi/" + cardTwoName + ".png")
-	cardTwo.FillMode = canvas.ImageFillOriginal
-
-	myHand[0] = cardOne
-	myHand[1] = cardTwo
-
+func updateHandImages(hand []*canvas.Image) {
+	fmt.Println("Updating Hand Images")
 	handGrid.Objects = nil
-	for _, image := range myHand {
+	for _, image := range hand {
 		handGrid.Add(image)
 	}
 	handGrid.Refresh()
 }
 
-
-func loadFlop(cardOneName, cardTwoName, cardThreeName string) {
-	cardOne := canvas.NewImageFromFile("media/svg_playing_cards/fronts/png_96_dpi/" + cardOneName + ".png")
-	cardOne.FillMode = canvas.ImageFillOriginal
-
-	cardTwo := canvas.NewImageFromFile("media/svg_playing_cards/fronts/png_96_dpi/" + cardTwoName + ".png")
-	cardTwo.FillMode = canvas.ImageFillOriginal
-
-	cardThree := canvas.NewImageFromFile("media/svg_playing_cards/fronts/png_96_dpi/" + cardThreeName + ".png")
-	cardThree.FillMode = canvas.ImageFillOriginal
-
-	theBoard[0] = cardOne
-	theBoard[1] = cardTwo
-	theBoard[2] = cardThree
-
+func updateBoardImages(board []*canvas.Image) {
+	fmt.Println("Updating Board Images")
 	boardGrid.Objects = nil
-	for _, image := range theBoard {
+	for _, image := range board {
 		boardGrid.Add(image)
 	}
 	boardGrid.Refresh()
 }
 
-func loadTurn(cardName string) {
-	card := canvas.NewImageFromFile("media/svg_playing_cards/fronts/png_96_dpi/" + cardName + ".png")
-	card.FillMode = canvas.ImageFillOriginal
-
-	theBoard[3] = card
-
-	boardGrid.Objects = nil
-	for _, image := range theBoard {
-		boardGrid.Add(image)
-	}
-	boardGrid.Refresh()
+func updatePot(pot float64) {
+	potLabel = widget.NewLabel(fmt.Sprintf("Pot: %.0f", pot))
+	potLabel.Refresh()
 }
 
-func loadRiver(cardName string) {
-	card := canvas.NewImageFromFile("media/svg_playing_cards/fronts/png_96_dpi/" + cardName + ".png")
-	card.FillMode = canvas.ImageFillOriginal
-
-	theBoard[4] = card
-
-	boardGrid.Objects = nil
-	for _, image := range theBoard {
-		boardGrid.Add(image)
-	}
-	boardGrid.Refresh()
+func updateMyMoney(money float64) {
+	moneyLabel = widget.NewLabel(fmt.Sprintf("My Money: %.0f", money))
+	moneyLabel.Refresh()
 }

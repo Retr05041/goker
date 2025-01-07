@@ -3,7 +3,7 @@ package gui
 import (
 	"fmt"
 
-	"goker/internal/p2p"
+	"goker/internal/channelmanager"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
@@ -27,11 +27,10 @@ func showMenuUI(givenWindow fyne.Window) {
 
 	submit := widget.NewButton("Submit", func() {
 		fmt.Println("Choice made: ", hostOrConnect)
+		channelmanager.HostConnectChannel <- hostOrConnect
 		if hostOrConnect == "Connect" {
-			go myself.Init(false, inputedAddress.Text)
 			showConnectedUI(givenWindow)
 		} else if hostOrConnect == "Host" {
-			go myself.Init(true, "")
 			showHostUI(givenWindow)
 		}
 	})
@@ -56,29 +55,15 @@ func showMenuUI(givenWindow fyne.Window) {
 				container.NewVBox(banner, peerType, inputedAddress, submit))))
 }
 
-// What the host will see
+// Host UI is the same as connectedUI but without settings
 func showHostUI(givenWindow fyne.Window) {
-	copyAddrButton := widget.NewButton("Copy server address", func() {
-		givenWindow.Clipboard().SetContent(myself.ThisHostMultiaddr)
-	})
-	testProtocolFS := widget.NewButton("Test ProtocolFS", func() {
-		myself.ExecuteCommand(&p2p.ProtocolFirstStep{})
-		fmt.Println("Test ProtocolFS done on all peers.")
-	})
-	testProtocolSS := widget.NewButton("Test ProtocolSS", func() {
-		myself.ExecuteCommand(&p2p.ProtocolSecondStep{})
-		fmt.Println("Test ProtocolSS done on all peers.")
-	})
-	DisplayDeck := widget.NewButton("Display Current Deck", func() {
-		myself.DisplayDeck()
-		fmt.Println("Deck Displayed.")
-	})
+	thankLabel := widget.NewLabel("Playing as Host!")
 
 	givenWindow.SetContent(
-		container.NewVBox(copyAddrButton, testProtocolFS, testProtocolSS, DisplayDeck))
+		container.NewVBox(thankLabel))
 }
 
-// What a connected peer will see
+// Connected UI is just a waiting area for the host to start
 func showConnectedUI(myWindow fyne.Window) {
 	thankLabel := widget.NewLabel("Connected to Host!")
 
@@ -88,37 +73,30 @@ func showConnectedUI(myWindow fyne.Window) {
 
 // Main game screen
 func showGameScreen(givenWindow fyne.Window) {
-	potLabel := widget.NewLabel(fmt.Sprintf("Pot: %.0f", pot))
-	moneyLabel := widget.NewLabel(fmt.Sprintf("My Money: %.0f", myMoney))
-	valueLabel := widget.NewLabel(fmt.Sprintf("Value: %.0f", minBet))
-	betSlider := widget.NewSlider(minBet, myMoney)
-	betSlider.Step = 1
-	betSlider.OnChanged = func(f float64) {
-		valueLabel.SetText(fmt.Sprintf("Value: %.0f", f))
-	}
 
 	foldButton := widget.NewButton("Fold", func() {
-		fmt.Println("Fold was pressed")
+		channelmanager.ActionChannel <- channelmanager.ActionType{
+			Action: "Fold",
+			Data: nil,
+		}
 	})
 	raiseButton := widget.NewButton("Raise", func() {
-		fmt.Println("Raise was pressed")
-		if myMoney - betSlider.Value < 0 {
-			fyne.CurrentApp().SendNotification(fyne.NewNotification("Warning", "Not enough funds to place this bet!"))
-			betSlider.SetValue(myMoney)
-		} else {
-			myMoney -= betSlider.Value
-			pot += betSlider.Value
-			moneyLabel.SetText(fmt.Sprintf("My Money: %.0f", myMoney))
-			moneyLabel.Refresh()
-			potLabel.SetText(fmt.Sprintf("Pot: %.0f", pot))
-			potLabel.Refresh()
+		channelmanager.ActionChannel <- channelmanager.ActionType{
+			Action: "Raise",
+			Data: &betSlider.Value,
 		}
 	})
 	callButton := widget.NewButton("Call", func() {
-		fmt.Println("Call was pressed")
+		channelmanager.ActionChannel <- channelmanager.ActionType{
+			Action: "Call",
+			Data: nil,
+		}
 	})
 	checkButton := widget.NewButton("Check", func() {
-		fmt.Println("Check was pressed")
+		channelmanager.ActionChannel <- channelmanager.ActionType{
+			Action: "Check",
+			Data: nil,
+		}
 	})
 
 	givenWindow.SetContent(

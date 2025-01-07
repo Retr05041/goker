@@ -14,14 +14,14 @@ type deckInfo struct {
 	// Holds a map of name to hash
 	ReferenceDeck map[string]*big.Int
 	// Holds hash's that will be encrypted and shuffled per round
-	RoundDeck []cardInfo
+	RoundDeck []CardInfo
 
 	// Secret for hashing cards - Needs to be shared
 	deckHashSecret *big.Int
 }
 
 // Holds individual card info
-type cardInfo struct {
+type CardInfo struct {
 	index          int
 	VariationIndex int
 	Cardvalue      *big.Int
@@ -73,14 +73,14 @@ func (g *deckInfo) GenerateRefDeck(key string) {
 
 // Generate the round deck, which will just be all the hash's from the reference deck
 func (g *deckInfo) GenerateRoundDeck(key string) {
-	newDeck := make([]cardInfo, 0, 52)
+	newDeck := make([]CardInfo, 0, 52)
 
 	index := 0
 	for _, suit := range suits {
 		for _, rank := range ranks {
 			cardName := suit + "_" + rank
 			cardHash := generateCardHash(cardName, key)
-			newDeck = append(newDeck, cardInfo{index: index, Cardvalue: cardHash})
+			newDeck = append(newDeck, CardInfo{index: index, Cardvalue: cardHash})
 			index++
 		}
 	}
@@ -118,13 +118,13 @@ func (g *deckInfo) GenerateDeckPayload() string {
 
 // Set the round deck given a payload from another peer in the network
 func (g *deckInfo) SetDeck(payload string) {
-	var newDeck []cardInfo
+	var newDeck []CardInfo
 	for i, line := range strings.Split(payload, "\n") {
 		if line == "" || line == "\\END" {
 			continue
 		}
 		card, _ := new(big.Int).SetString(line, 10)
-		newDeck = append(newDeck, cardInfo{index: i, Cardvalue: card})
+		newDeck = append(newDeck, CardInfo{index: i, Cardvalue: card})
 	}
 	g.RoundDeck = newDeck
 }

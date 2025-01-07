@@ -3,7 +3,6 @@ package sra
 // SRA - RSA variant
 
 import (
-	"goker/internal/game"
 	"crypto/rand"
 	"crypto/sha256"
 	"fmt"
@@ -145,26 +144,10 @@ func (k *Keyring) EncryptWithGlobalKeys(data *big.Int) *big.Int {
 	return new(big.Int).Exp(data, k.globalPublicKey, k.globalN)
 }
 
-// Same as EncryptWithGlobalKeys but over a list of Cards
-func (k *Keyring) EncryptAllWithGlobalKeys(data []game.Card) []game.Card {
-	for i, v := range data {
-		data[i].Cardvalue = k.EncryptWithGlobalKeys(v.Cardvalue)
-	}
-	return data
-}
-
 // Decyrpts message (hash) with the global keys inside the keyring.
 // Should check if keys exist before attempting
 func (k *Keyring) DecryptWithGlobalKeys(data *big.Int) *big.Int {
 	return new(big.Int).Exp(data, k.globalPrivateKey, k.globalN)
-}
-
-// Same as DecryptWithGlobalKeys but over a list of Cards
-func (k *Keyring) DecryptAllWithGlobalKeys(data []game.Card) []game.Card {
-	for i, v := range data {
-		data[i].Cardvalue = k.DecryptWithGlobalKeys(v.Cardvalue)
-	}
-	return data
 }
 
 // Use on hash after full decryption to pad it back to full and return it as a string
