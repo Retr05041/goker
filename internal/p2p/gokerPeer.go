@@ -2,6 +2,7 @@ package p2p
 
 import (
 	"fmt"
+	"goker/internal/channelmanager"
 	"goker/internal/sra"
 	"log"
 	"sync"
@@ -71,6 +72,7 @@ func (p *GokerPeer) Init(hosting bool, givenAddr string) {
 		//go s.alert()
 	}
 
+	channelmanager.NetworkInitDoneChannel <- struct{}{}
 	// Handle notifications forever
 	go p.handleNotifications()
 }

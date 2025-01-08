@@ -7,7 +7,6 @@ import (
 var (
 	// Channels for user input (<- GUI)
 	InitHandAndBoard   chan bool
-	HostConnectChannel chan string
 	ActionChannel      chan ActionType
 
 	// Channels for specific elements in the UI (-> GUI)
@@ -15,6 +14,11 @@ var (
 	BoardChannel   chan []*canvas.Image
 	PotChannel     chan float64
 	MyMoneyChannel chan float64
+	PlayersChannel chan int
+	AddressChannel chan string
+
+	// Channles for network
+	NetworkInitDoneChannel chan struct{}
 )
 
 type ActionType struct {
@@ -26,11 +30,14 @@ type ActionType struct {
 // Initialize all channels
 func Init() {
 	InitHandAndBoard = make(chan bool)
-	HostConnectChannel = make(chan string)
 	ActionChannel = make(chan ActionType)
 
 	HandChannel = make(chan []*canvas.Image)
 	BoardChannel = make(chan []*canvas.Image)
 	PotChannel = make(chan float64)
 	MyMoneyChannel = make(chan float64)
+	PlayersChannel = make(chan int)
+	AddressChannel = make(chan string)
+
+	NetworkInitDoneChannel = make(chan struct{})
 }

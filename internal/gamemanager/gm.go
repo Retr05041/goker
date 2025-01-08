@@ -71,6 +71,8 @@ func (gm *GameManager) listenForActions() {
 				} else {
 					go gm.network.Init(false, *givenAction.DataS) 
 				}
+				<-channelmanager.NetworkInitDoneChannel
+				channelmanager.AddressChannel <- gm.network.ThisHostMultiaddr
 			case "Raise":
 				// Handle raise action
 				fmt.Println("Handling Raise action")

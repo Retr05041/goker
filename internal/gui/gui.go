@@ -32,9 +32,7 @@ func Init() {
 	go gmListener()
 
 	// Init everything on the GM side
-	channelmanager.ActionChannel <- channelmanager.ActionType{
-		Action: "Init",
-	}
+	channelmanager.ActionChannel <- channelmanager.ActionType{Action: "Init"}
 
 	// Run the first scene
 	showMenuUI(mainWindow)
@@ -55,6 +53,10 @@ func gmListener() {
 			updatePot(pot)
 		case money := <-channelmanager.MyMoneyChannel:
 			updateMyMoney(money)
+		case players := <-channelmanager.PlayersChannel:
+			updateNumOfPlayers(players)
+		case address := <- channelmanager.AddressChannel:
+			updateAddress(address)
 		}
 	}
 }
@@ -85,4 +87,13 @@ func updatePot(pot float64) {
 func updateMyMoney(money float64) {
 	moneyLabel.SetText(fmt.Sprintf("My Money: %.0f", money))
 	moneyLabel.Refresh()
+}
+
+func updateNumOfPlayers(players int) {
+	numOfPlayers.SetText(fmt.Sprintf("# of players: %d", players))
+	numOfPlayers.Refresh()
+}
+
+func updateAddress(address string) {
+	hostAddress = address
 }

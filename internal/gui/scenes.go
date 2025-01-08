@@ -14,15 +14,14 @@ import (
 // Main Menu
 func showMenuUI(givenWindow fyne.Window) {
 	var hostOrConnect string
-
-	inputedAddress := widget.NewEntry()
-	inputedAddress.SetPlaceHolder("Host address...")
-	inputedAddress.Disable()
-
 	banner := canvas.NewText("Goker", BLUE)
 	banner.TextSize = 24
 	banner.TextStyle = fyne.TextStyle{Bold: true, Italic: false}
 	banner.Alignment = fyne.TextAlignCenter
+
+	inputedAddress := widget.NewEntry()
+	inputedAddress.SetPlaceHolder("Host address...")
+	inputedAddress.Disable()
 
 	submit := widget.NewButton("Submit", func() {
 		fmt.Println("Choice made: ", hostOrConnect)
@@ -55,18 +54,26 @@ func showMenuUI(givenWindow fyne.Window) {
 
 // Host UI is the same as connectedUI but without settings
 func showHostUI(givenWindow fyne.Window) {
-	thankLabel := widget.NewLabel("Playing as Host!")
+	playButton := widget.NewButton("Play", func() {
+		showGameScreen(givenWindow)
+	})
+	copyAddrButton := widget.NewButton("Copy server address", func() {
+		givenWindow.Clipboard().SetContent(hostAddress)
+	})
 
 	givenWindow.SetContent(
-		container.NewVBox(thankLabel))
+		container.NewCenter(
+			container.NewVBox(
+				numOfPlayers,
+				copyAddrButton,
+				playButton)))
 }
 
 // Connected UI is just a waiting area for the host to start
 func showConnectedUI(myWindow fyne.Window) {
-	thankLabel := widget.NewLabel("Connected to Host!")
-
+	waiting := widget.NewLabel("Waiting for host to begin game!")
 	myWindow.SetContent(
-		container.NewVBox(thankLabel))
+		container.NewCenter(waiting))
 }
 
 // Main game screen
