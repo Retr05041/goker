@@ -34,11 +34,10 @@ func Init() {
 	// Init everything on the GM side
 	channelmanager.ActionChannel <- channelmanager.ActionType{
 		Action: "Init",
-		Data: nil,
 	}
 
 	// Run the first scene
-	showGameScreen(mainWindow)
+	showMenuUI(mainWindow)
 
 	// Run GUI
 	mainWindow.Resize(fyne.NewSize(float32(MAX_WIDTH), float32(MAX_HEIGHT))) // Set the window size

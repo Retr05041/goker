@@ -19,7 +19,6 @@ func showMenuUI(givenWindow fyne.Window) {
 	inputedAddress.SetPlaceHolder("Host address...")
 	inputedAddress.Disable()
 
-
 	banner := canvas.NewText("Goker", BLUE)
 	banner.TextSize = 24
 	banner.TextStyle = fyne.TextStyle{Bold: true, Italic: false}
@@ -27,10 +26,11 @@ func showMenuUI(givenWindow fyne.Window) {
 
 	submit := widget.NewButton("Submit", func() {
 		fmt.Println("Choice made: ", hostOrConnect)
-		channelmanager.HostConnectChannel <- hostOrConnect
 		if hostOrConnect == "Connect" {
+			channelmanager.ActionChannel <- channelmanager.ActionType{Action: "hostOrConnectPressed", DataS: &inputedAddress.Text}
 			showConnectedUI(givenWindow)
 		} else if hostOrConnect == "Host" {
+			channelmanager.ActionChannel <- channelmanager.ActionType{Action: "hostOrConnectPressed", DataS: nil}
 			showHostUI(givenWindow)
 		}
 	})
@@ -46,12 +46,10 @@ func showMenuUI(givenWindow fyne.Window) {
 		hostOrConnect = value
 	})
 
-
-	
 	givenWindow.SetContent(
 		container.NewCenter(
 			container.NewGridWrap(
-				fyne.NewSize(float32(MAX_WIDTH), float32(MAX_HEIGHT)), 
+				fyne.NewSize(float32(MAX_WIDTH), float32(MAX_HEIGHT)),
 				container.NewVBox(banner, peerType, inputedAddress, submit))))
 }
 
@@ -75,45 +73,33 @@ func showConnectedUI(myWindow fyne.Window) {
 func showGameScreen(givenWindow fyne.Window) {
 
 	foldButton := widget.NewButton("Fold", func() {
-		channelmanager.ActionChannel <- channelmanager.ActionType{
-			Action: "Fold",
-			Data: nil,
-		}
+		channelmanager.ActionChannel <- channelmanager.ActionType{Action: "Fold"}
 	})
 	raiseButton := widget.NewButton("Raise", func() {
-		channelmanager.ActionChannel <- channelmanager.ActionType{
-			Action: "Raise",
-			Data: &betSlider.Value,
-		}
+		channelmanager.ActionChannel <- channelmanager.ActionType{Action: "Raise", DataF: &betSlider.Value}
 	})
 	callButton := widget.NewButton("Call", func() {
-		channelmanager.ActionChannel <- channelmanager.ActionType{
-			Action: "Call",
-			Data: nil,
-		}
+		channelmanager.ActionChannel <- channelmanager.ActionType{Action: "Call"}
 	})
 	checkButton := widget.NewButton("Check", func() {
-		channelmanager.ActionChannel <- channelmanager.ActionType{
-			Action: "Check",
-			Data: nil,
-		}
+		channelmanager.ActionChannel <- channelmanager.ActionType{Action: "Check"}
 	})
 
 	givenWindow.SetContent(
 		container.NewCenter(
 			container.NewVBox(
-			container.NewCenter(potLabel),
-			boardGrid,
-			container.NewPadded(
-				container.NewCenter(
-					container.NewVBox(
-						container.NewCenter(moneyLabel),
-						container.NewHBox(
-								handGrid, 
+				container.NewCenter(potLabel),
+				boardGrid,
+				container.NewPadded(
+					container.NewCenter(
+						container.NewVBox(
+							container.NewCenter(moneyLabel),
+							container.NewHBox(
+								handGrid,
 								container.NewVBox(
-									foldButton, 
-									callButton, 
-									container.NewHBox(raiseButton, valueLabel), 
+									foldButton,
+									callButton,
+									container.NewHBox(raiseButton, valueLabel),
 									betSlider),
 								checkButton)))))))
 }

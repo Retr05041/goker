@@ -19,10 +19,13 @@ type GokerPeer struct {
 	sessionHost       peer.ID                         // Host of the current network (This will change has hosts drop out, but will be used to request specific things)
 	peerList          map[peer.ID]multiaddr.Multiaddr // A map for managing peer connections
 	peerListMutex     sync.Mutex                      // Mutex for accessing peer map
-
 	// Other
 	deck    *deckInfo    // Holds all deck logic (cards, deck operations etc.)
 	keyring *sra.Keyring // Holds all encryption logic
+
+	// Data accessable to the gamemanager
+	Nickname string
+	Nicknames []string // Everyone else's nicknames, in candidate list order to match with
 }
 
 func (p *GokerPeer) Init(hosting bool, givenAddr string) {

@@ -19,7 +19,8 @@ var (
 
 type ActionType struct {
 	Action string
-	Data   *float64
+	DataF  *float64
+	DataS  *string
 }
 
 // Initialize all channels

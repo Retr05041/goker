@@ -11,6 +11,8 @@ import (
 type GameManager struct {
 	state   *GameState
 	network *p2p.GokerPeer
+
+	nickname string
 }
 
 func (gm *GameManager) StartGame(minBet *float64) {
@@ -25,13 +27,17 @@ func (gm *GameManager) StartGame(minBet *float64) {
 }
 
 type GameState struct {
-	Pot        float64 // The current pot amount
-	MyMoney    float64
-	MinBet     float64            // Minimum bet required for the round
-	MyHand     []*canvas.Image    // Cards for the current player (images for the GUI to render)
-	Board      []*canvas.Image    // Community cards on the board (images for the gui to render)
-	Phase      string             // Current phase of the game (e.g., "preflop", "flop", "turn", "river")
-	BetHistory map[string]float64 // A map to store bets placed by players
+	Nickname    string             // Player nickname
+	TurnOrder   []string           // Turn order of round - Given by gokerpeer, candidatelist order, nicknames
+	OthersMoney []float64          // Others dabloons - Set by table settings at init
+	MyTurn      bool               // If it's my turn obviously
+	Pot         float64            // The current pot amount
+	MyMoney     float64            // Me dabloons (initializes from host when he picks the table settings)
+	MinBet      float64            // Minimum bet required for the round (again from table settings)
+	MyHand      []*canvas.Image    // Cards for the current player (images for the GUI to render)
+	Board       []*canvas.Image    // Community cards on the board (images for the gui to render)
+	Phase       string             // Current phase of the game (e.g., "preflop", "flop", "turn", "river")
+	BetHistory  map[string]float64 // A map to store bets placed by players
 }
 
 // StartGame initializes the game state
@@ -57,12 +63,20 @@ func (gm *GameManager) listenForActions() {
 				gm.initBoard()
 				channelmanager.MyMoneyChannel <- gm.state.MyMoney
 				channelmanager.PotChannel <- gm.state.Pot
+			case "hostOrConnectPressed":
+				fmt.Println("Got here!")
+				gm.network = new(p2p.GokerPeer)
+				if givenAction.DataS == nil { // 
+					go gm.network.Init(true, "") 
+				} else {
+					go gm.network.Init(false, *givenAction.DataS) 
+				}
 			case "Raise":
 				// Handle raise action
 				fmt.Println("Handling Raise action")
 				// Update state accordingly
-				gm.state.MyMoney -= *givenAction.Data
-				gm.state.Pot += *givenAction.Data
+				gm.state.MyMoney -= *givenAction.DataF
+				gm.state.Pot += *givenAction.DataF
 				channelmanager.MyMoneyChannel <- gm.state.MyMoney
 				channelmanager.PotChannel <- gm.state.Pot
 			case "Fold":
