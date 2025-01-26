@@ -14,7 +14,7 @@ func (gm *GameManager) initHand() {
 		gm.state.MyHand = append(gm.state.MyHand, cardImage)
 	}
 
-	channelmanager.HandChannel <- gm.state.MyHand // Send the new hand through the channel
+	channelmanager.TGUI_HandChan <- gm.state.MyHand // Send the new hand through the channel
 }
 
 // Setup board with back of cards
@@ -26,7 +26,7 @@ func (gm *GameManager) initBoard() {
 		gm.state.Board = append(gm.state.Board, cardImage)
 	}
 
-	channelmanager.BoardChannel <- gm.state.Board
+	channelmanager.TGUI_BoardChan <- gm.state.Board
 }
 
 // Load two cards into your hand and update the grid
@@ -39,7 +39,7 @@ func (gm *GameManager) loadHand(cardOneName, cardTwoName string) {
 
 	gm.state.MyHand[0] = cardOne
 	gm.state.MyHand[1] = cardTwo
-	channelmanager.HandChannel <- gm.state.MyHand
+	channelmanager.TGUI_HandChan <- gm.state.MyHand
 }
 
 func (gm *GameManager) loadFlop(cardOneName, cardTwoName, cardThreeName string) {
@@ -55,7 +55,7 @@ func (gm *GameManager) loadFlop(cardOneName, cardTwoName, cardThreeName string) 
 	gm.state.Board[0] = cardOne
 	gm.state.Board[1] = cardTwo
 	gm.state.Board[2] = cardThree
-	channelmanager.BoardChannel <- gm.state.Board
+	channelmanager.TGUI_BoardChan <- gm.state.Board
 }
 
 func (gm *GameManager) loadTurn(cardName string) {
@@ -63,7 +63,7 @@ func (gm *GameManager) loadTurn(cardName string) {
 	card.FillMode = canvas.ImageFillOriginal
 
 	gm.state.Board[3] = card
-	channelmanager.BoardChannel <- gm.state.Board
+	channelmanager.TGUI_BoardChan <- gm.state.Board
 }
 
 func (gm *GameManager) loadRiver(cardName string) {
@@ -71,5 +71,5 @@ func (gm *GameManager) loadRiver(cardName string) {
 	card.FillMode = canvas.ImageFillOriginal
 
 	gm.state.Board[4] = card
-	channelmanager.BoardChannel <- gm.state.Board
+	channelmanager.TGUI_BoardChan <- gm.state.Board
 }

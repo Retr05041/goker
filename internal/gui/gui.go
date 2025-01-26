@@ -32,7 +32,7 @@ func Init() {
 	go gmListener()
 
 	// Init everything on the GM side
-	channelmanager.ActionChannel <- channelmanager.ActionType{Action: "Init"}
+	channelmanager.FGUI_ActionChan <- channelmanager.ActionType{Action: "Init"}
 
 	// Run the first scene
 	showMenuUI(mainWindow)
@@ -45,17 +45,17 @@ func Init() {
 func gmListener() {
 	for {
 		select {
-		case hand := <-channelmanager.HandChannel: // Hand = whatever is coming in from the handChannel
+		case hand := <-channelmanager.TGUI_HandChan: // Hand = whatever is coming in from the handChannel
 			updateHandImages(hand)
-		case board := <-channelmanager.BoardChannel:
+		case board := <-channelmanager.TGUI_BoardChan:
 			updateBoardImages(board)
-		case pot := <-channelmanager.PotChannel:
+		case pot := <-channelmanager.TGUI_PotChan:
 			updatePot(pot)
-		case money := <-channelmanager.MyMoneyChannel:
+		case money := <-channelmanager.TGUI_MyMoneyChan:
 			updateMyMoney(money)
-		case players := <-channelmanager.PlayersChannel:
+		case players := <-channelmanager.FNET_NumOfPlayersChan: // Gets it straight from the network
 			updateNumOfPlayers(players)
-		case address := <- channelmanager.AddressChannel:
+		case address := <- channelmanager.TGUI_AddressChan:
 			updateAddress(address)
 		}
 	}

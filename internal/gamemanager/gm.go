@@ -56,31 +56,31 @@ func (gs *GameState) StartGame(minBet *float64) {
 func (gm *GameManager) listenForActions() {
 	for {
 		select {
-		case givenAction := <-channelmanager.ActionChannel:
+		case givenAction := <-channelmanager.FGUI_ActionChan:
 			switch givenAction.Action {
 			case "Init":
 				gm.initHand()
 				gm.initBoard()
-				channelmanager.MyMoneyChannel <- gm.state.MyMoney
-				channelmanager.PotChannel <- gm.state.Pot
+				channelmanager.TGUI_MyMoneyChan <- gm.state.MyMoney
+				channelmanager.TGUI_PotChan <- gm.state.Pot
 			case "hostOrConnectPressed":
 				fmt.Println("Got here!")
 				gm.network = new(p2p.GokerPeer)
-				if givenAction.DataS == nil { // 
+				if givenAction.DataS == nil { 
 					go gm.network.Init(true, "") 
 				} else {
 					go gm.network.Init(false, *givenAction.DataS) 
 				}
-				<-channelmanager.NetworkInitDoneChannel
-				channelmanager.AddressChannel <- []string{gm.network.ThisHostLBAddress, gm.network.ThisHostLNAddress}
+				<-channelmanager.FNET_InitDoneChan // Just wanna wait for network to catch up
+				channelmanager.TGUI_AddressChan <- []string{gm.network.ThisHostLBAddress, gm.network.ThisHostLNAddress}
 			case "Raise":
 				// Handle raise action
 				fmt.Println("Handling Raise action")
 				// Update state accordingly
 				gm.state.MyMoney -= *givenAction.DataF
 				gm.state.Pot += *givenAction.DataF
-				channelmanager.MyMoneyChannel <- gm.state.MyMoney
-				channelmanager.PotChannel <- gm.state.Pot
+				channelmanager.TGUI_MyMoneyChan <- gm.state.MyMoney
+				channelmanager.TGUI_PotChan <- gm.state.Pot
 			case "Fold":
 				// Handle fold action
 				fmt.Println("Handling Fold action")

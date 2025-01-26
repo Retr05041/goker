@@ -21,6 +21,7 @@ type GokerPeer struct {
 	sessionHost       peer.ID                         // Host of the current network (This will change has hosts drop out, but will be used to request specific things)
 	peerList          map[peer.ID]multiaddr.Multiaddr // A map for managing peer connections
 	peerListMutex     sync.Mutex                      // Mutex for accessing peer map
+
 	// Other
 	deck    *deckInfo    // Holds all deck logic (cards, deck operations etc.)
 	keyring *sra.Keyring // Holds all encryption logic
@@ -28,6 +29,7 @@ type GokerPeer struct {
 	// Data accessable to the gamemanager
 	Nickname  string
 	Nicknames []string // Everyone else's nicknames, in candidate list order to match with
+	NumOfPlayers int
 }
 
 func (p *GokerPeer) Init(hosting bool, givenAddr string) {
@@ -44,6 +46,7 @@ func (p *GokerPeer) Init(hosting bool, givenAddr string) {
 
 	p.thisHost = h
 	p.peerList = make(map[peer.ID]multiaddr.Multiaddr)
+	p.NumOfPlayers = 0
 
 	// Listen for incoming connections - Use an anonymous function atm since we don't want to do much
 	h.SetStreamHandler(protocolID, p.handleStream)
@@ -74,7 +77,7 @@ func (p *GokerPeer) Init(hosting bool, givenAddr string) {
 		//go s.alert()
 	}
 
-	channelmanager.NetworkInitDoneChannel <- struct{}{}
+	channelmanager.FNET_InitDoneChan <- struct{}{}
 	// Handle notifications forever
 	go p.handleNotifications()
 }

@@ -6,19 +6,19 @@ import (
 
 var (
 	// Channels for user input (<- GUI)
-	InitHandAndBoard   chan bool
-	ActionChannel      chan ActionType
+	FGUI_InitChan chan bool
+	FGUI_ActionChan    chan ActionType
 
 	// Channels for specific elements in the UI (-> GUI)
-	HandChannel    chan []*canvas.Image
-	BoardChannel   chan []*canvas.Image
-	PotChannel     chan float64
-	MyMoneyChannel chan float64
-	PlayersChannel chan int
-	AddressChannel chan []string
+	TGUI_HandChan    chan []*canvas.Image
+	TGUI_BoardChan   chan []*canvas.Image
+	TGUI_PotChan     chan float64
+	TGUI_MyMoneyChan chan float64
+	TGUI_AddressChan chan []string
 
 	// Channles for network
-	NetworkInitDoneChannel chan struct{}
+	FNET_InitDoneChan     chan struct{}
+	FNET_NumOfPlayersChan chan int
 )
 
 type ActionType struct {
@@ -29,15 +29,15 @@ type ActionType struct {
 
 // Initialize all channels
 func Init() {
-	InitHandAndBoard = make(chan bool)
-	ActionChannel = make(chan ActionType)
+	FGUI_InitChan = make(chan bool)
+	FGUI_ActionChan = make(chan ActionType)
 
-	HandChannel = make(chan []*canvas.Image)
-	BoardChannel = make(chan []*canvas.Image)
-	PotChannel = make(chan float64)
-	MyMoneyChannel = make(chan float64)
-	PlayersChannel = make(chan int)
-	AddressChannel = make(chan []string)
+	TGUI_HandChan = make(chan []*canvas.Image)
+	TGUI_BoardChan = make(chan []*canvas.Image)
+	TGUI_PotChan = make(chan float64)
+	TGUI_MyMoneyChan = make(chan float64)
+	TGUI_AddressChan = make(chan []string)
 
-	NetworkInitDoneChannel = make(chan struct{})
+	FNET_InitDoneChan = make(chan struct{})
+	FNET_NumOfPlayersChan = make(chan int)
 }

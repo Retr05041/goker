@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"goker/internal/channelmanager"
 	"io"
 	"log"
 	"strings"
@@ -26,11 +27,14 @@ func (p *GokerPeer) handleNotifications() {
 
 			// Connect to the new peer and update the peer list
 			p.handlePeerConnection(conn.RemotePeer(), conn.RemoteMultiaddr())
+			// Send an update to the game manager
+			channelmanager.FNET_NumOfPlayersChan <- p.NumOfPlayers
 		},
 		DisconnectedF: func(n network.Network, conn network.Conn) { // On peer disconnect
 			fmt.Printf("NOTIFICATION: Disconnected from peer: %s\n", conn.RemotePeer())
 
 			p.handlePeerDisconnection(conn.RemotePeer())
+			channelmanager.FNET_NumOfPlayersChan <- p.NumOfPlayers
 		},
 	})
 
@@ -198,6 +202,7 @@ func (p *GokerPeer) handlePeerConnection(newPeerID peer.ID, newPeerAddr multiadd
 		return
 	}
 	fmt.Printf("Connected to new peer: %s\n", newPeerID)
+	p.NumOfPlayers++
 }
 
 // Handle existing peer disconnection - Called when the DisconnectF NOTIFICATION has been made
@@ -209,6 +214,7 @@ func (p *GokerPeer) handlePeerDisconnection(peerID peer.ID) {
 	if _, exists := p.peerList[peerID]; exists {
 		delete(p.peerList, peerID)
 		fmt.Printf("Peer %s disconnected and removed from peer list.\n", peerID)
+		p.NumOfPlayers--
 	} else {
 		log.Printf("Peer %s not found in peer list.\n", peerID)
 	}

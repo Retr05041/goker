@@ -26,10 +26,10 @@ func showMenuUI(givenWindow fyne.Window) {
 	submit := widget.NewButton("Submit", func() {
 		fmt.Println("Choice made: ", hostOrConnect)
 		if hostOrConnect == "Connect" {
-			channelmanager.ActionChannel <- channelmanager.ActionType{Action: "hostOrConnectPressed", DataS: &inputedAddress.Text}
+			channelmanager.FGUI_ActionChan <- channelmanager.ActionType{Action: "hostOrConnectPressed", DataS: &inputedAddress.Text}
 			showConnectedUI(givenWindow)
 		} else if hostOrConnect == "Host" {
-			channelmanager.ActionChannel <- channelmanager.ActionType{Action: "hostOrConnectPressed", DataS: nil}
+			channelmanager.FGUI_ActionChan <- channelmanager.ActionType{Action: "hostOrConnectPressed", DataS: nil}
 			showHostUI(givenWindow)
 		}
 	})
@@ -83,16 +83,16 @@ func showConnectedUI(myWindow fyne.Window) {
 func showGameScreen(givenWindow fyne.Window) {
 
 	foldButton := widget.NewButton("Fold", func() {
-		channelmanager.ActionChannel <- channelmanager.ActionType{Action: "Fold"}
+		channelmanager.FGUI_ActionChan <- channelmanager.ActionType{Action: "Fold"}
 	})
 	raiseButton := widget.NewButton("Raise", func() {
-		channelmanager.ActionChannel <- channelmanager.ActionType{Action: "Raise", DataF: &betSlider.Value}
+		channelmanager.FGUI_ActionChan <- channelmanager.ActionType{Action: "Raise", DataF: &betSlider.Value}
 	})
 	callButton := widget.NewButton("Call", func() {
-		channelmanager.ActionChannel <- channelmanager.ActionType{Action: "Call"}
+		channelmanager.FGUI_ActionChan <- channelmanager.ActionType{Action: "Call"}
 	})
 	checkButton := widget.NewButton("Check", func() {
-		channelmanager.ActionChannel <- channelmanager.ActionType{Action: "Check"}
+		channelmanager.FGUI_ActionChan <- channelmanager.ActionType{Action: "Check"}
 	})
 
 	givenWindow.SetContent(
