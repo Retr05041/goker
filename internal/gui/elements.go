@@ -11,7 +11,8 @@ var (
 
 	// Lobby
 	numOfPlayers = widget.NewLabel(fmt.Sprintf("# of players: %d", 0))
-	hostAddress  string
+	loopbackAddress string
+	lanAddress string
 
 	// Game
 	handGrid  = container.NewGridWithColumns(2) // Holds the hand images

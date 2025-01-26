@@ -15,7 +15,7 @@ var (
 	PotChannel     chan float64
 	MyMoneyChannel chan float64
 	PlayersChannel chan int
-	AddressChannel chan string
+	AddressChannel chan []string
 
 	// Channles for network
 	NetworkInitDoneChannel chan struct{}
@@ -37,7 +37,7 @@ func Init() {
 	PotChannel = make(chan float64)
 	MyMoneyChannel = make(chan float64)
 	PlayersChannel = make(chan int)
-	AddressChannel = make(chan string)
+	AddressChannel = make(chan []string)
 
 	NetworkInitDoneChannel = make(chan struct{})
 }

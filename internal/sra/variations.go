@@ -3,7 +3,6 @@ package sra
 import (
 	"fmt"
 	"math/big"
-	"strconv"
 )
 
 type KeyVariation struct {
@@ -18,7 +17,6 @@ func (k *Keyring) GenerateKeyVariations(count int) error {
 	k.keyVariations = make([]*KeyVariation, count)
 
 	for i := 0; i < count; i++ {
-		fmt.Println("Generating variation: " + strconv.Itoa(i))
 		currentVariation := new(KeyVariation)
 
 		r, err := generateRandomCoPrime(k.globalPHI)

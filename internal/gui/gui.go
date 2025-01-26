@@ -94,6 +94,7 @@ func updateNumOfPlayers(players int) {
 	numOfPlayers.Refresh()
 }
 
-func updateAddress(address string) {
-	hostAddress = address
+func updateAddress(addresses []string) {
+	loopbackAddress = addresses[0]
+	lanAddress = addresses[1]
 }

@@ -57,15 +57,18 @@ func showHostUI(givenWindow fyne.Window) {
 	playButton := widget.NewButton("Play", func() {
 		showGameScreen(givenWindow)
 	})
-	copyAddrButton := widget.NewButton("Copy server address", func() {
-		givenWindow.Clipboard().SetContent(hostAddress)
+	copyLBAddrButton := widget.NewButton("Copy LB address", func() {
+		givenWindow.Clipboard().SetContent(loopbackAddress)
+	})
+	copyLNAddrButton := widget.NewButton("Copy LAN address", func() {
+		givenWindow.Clipboard().SetContent(lanAddress)
 	})
 
 	givenWindow.SetContent(
 		container.NewCenter(
 			container.NewVBox(
 				numOfPlayers,
-				copyAddrButton,
+				container.NewHBox(copyLBAddrButton, copyLNAddrButton),
 				playButton)))
 }
 

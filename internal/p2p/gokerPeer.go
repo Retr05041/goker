@@ -16,7 +16,8 @@ import (
 type GokerPeer struct {
 	// Network logic
 	thisHost          host.Host                       // This host
-	ThisHostMultiaddr string                          // This hosts multiaddress
+	ThisHostLBAddress string                          // This hosts loopback address (127.0.0.1)
+	ThisHostLNAddress string                          // This hosts LAN address
 	sessionHost       peer.ID                         // Host of the current network (This will change has hosts drop out, but will be used to request specific things)
 	peerList          map[peer.ID]multiaddr.Multiaddr // A map for managing peer connections
 	peerListMutex     sync.Mutex                      // Mutex for accessing peer map
@@ -25,7 +26,7 @@ type GokerPeer struct {
 	keyring *sra.Keyring // Holds all encryption logic
 
 	// Data accessable to the gamemanager
-	Nickname string
+	Nickname  string
 	Nicknames []string // Everyone else's nicknames, in candidate list order to match with
 }
 
@@ -47,15 +48,16 @@ func (p *GokerPeer) Init(hosting bool, givenAddr string) {
 	// Listen for incoming connections - Use an anonymous function atm since we don't want to do much
 	h.SetStreamHandler(protocolID, p.handleStream)
 
-	p.peerList[h.ID()] = h.Addrs()[0]
+	p.peerList[h.ID()] = h.Addrs()[4] // base peerList off of lan IP's till we go international
 
 	// Print the host's ID and multiaddresses
-	p.ThisHostMultiaddr = h.Addrs()[0].String() + "/p2p/" + h.ID().String()
+	p.ThisHostLBAddress = h.Addrs()[0].String() + "/p2p/" + h.ID().String()
+	p.ThisHostLNAddress = h.Addrs()[4].String() + "/p2p/" + h.ID().String()
 	fmt.Printf("Host created. We are: %s\n", h.ID())
 	// Green console colour: 	\x1b[32m
 	// Reset console colour: 	\x1b[0m
 	if hosting {
-		fmt.Printf("Listening on specifc multiaddress (give this to other peers): \x1b[32m %s \x1b[0m\n", p.ThisHostMultiaddr)
+		fmt.Printf("Listening on specifc multiaddress (give this to other peers): \x1b[32m %s \x1b[0m\n", p.ThisHostLNAddress)
 	}
 
 	if hosting {
@@ -79,30 +81,4 @@ func (p *GokerPeer) Init(hosting bool, givenAddr string) {
 
 func (g *GokerPeer) DisplayDeck() {
 	g.deck.DisplayDeck()
-}
-
-// Decrypt deck with global keys
-func (p *GokerPeer) DecryptAllWithGlobalKeys() {
-	for _, card := range p.deck.RoundDeck {
-		card.Cardvalue = p.keyring.DecryptWithGlobalKeys(card.Cardvalue)
-	}
-}
-
-// Encrypt deck with global keys
-func (p *GokerPeer) EncryptAllWithGlobalKeys() {
-	for _, card := range p.deck.RoundDeck {
-		card.Cardvalue = p.keyring.EncryptWithGlobalKeys(card.Cardvalue)
-	}
-}
-
-// Encrypt deck with variation numbers
-func (p *GokerPeer) EncryptAllWithVariation() {
-	for i, card := range p.deck.RoundDeck {
-		encryptedCard, err := p.keyring.EncryptWithVariation(card.Cardvalue, i)
-		if err != nil {
-			log.Println(err)
-		}
-		p.deck.RoundDeck[i].Cardvalue = encryptedCard
-		p.deck.RoundDeck[i].VariationIndex = i
-	}
 }

@@ -1,6 +1,7 @@
 package p2p
 
 import (
+	"log"
 	"crypto/hmac"
 	"crypto/sha256"
 	"fmt"
@@ -127,4 +128,31 @@ func (g *deckInfo) SetDeck(payload string) {
 		newDeck = append(newDeck, CardInfo{index: i, Cardvalue: card})
 	}
 	g.RoundDeck = newDeck
+}
+
+
+// Decrypt deck with global keys
+func (p *GokerPeer) DecryptAllWithGlobalKeys() {
+	for _, card := range p.deck.RoundDeck {
+		card.Cardvalue = p.keyring.DecryptWithGlobalKeys(card.Cardvalue)
+	}
+}
+
+// Encrypt deck with global keys
+func (p *GokerPeer) EncryptAllWithGlobalKeys() {
+	for _, card := range p.deck.RoundDeck {
+		card.Cardvalue = p.keyring.EncryptWithGlobalKeys(card.Cardvalue)
+	}
+}
+
+// Encrypt deck with variation numbers
+func (p *GokerPeer) EncryptAllWithVariation() {
+	for i, card := range p.deck.RoundDeck {
+		encryptedCard, err := p.keyring.EncryptWithVariation(card.Cardvalue, i)
+		if err != nil {
+			log.Println(err)
+		}
+		p.deck.RoundDeck[i].Cardvalue = encryptedCard
+		p.deck.RoundDeck[i].VariationIndex = i
+	}
 }
