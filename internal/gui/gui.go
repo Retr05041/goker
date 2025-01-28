@@ -57,6 +57,8 @@ func gmListener() {
 			updateNumOfPlayers(players)
 		case address := <- channelmanager.TGUI_AddressChan:
 			updateAddress(address)
+		case roundHasStarted := <- channelmanager.FNET_StartRoundChan:
+			startGame = roundHasStarted
 		}
 	}
 }

@@ -29,7 +29,6 @@ type GokerPeer struct {
 	// Data accessable to the gamemanager
 	Nickname  string
 	Nicknames []string // Everyone else's nicknames, in candidate list order to match with
-	NumOfPlayers int
 }
 
 func (p *GokerPeer) Init(hosting bool, givenAddr string) {
@@ -46,7 +45,6 @@ func (p *GokerPeer) Init(hosting bool, givenAddr string) {
 
 	p.thisHost = h
 	p.peerList = make(map[peer.ID]multiaddr.Multiaddr)
-	p.NumOfPlayers = 0
 
 	// Listen for incoming connections - Use an anonymous function atm since we don't want to do much
 	h.SetStreamHandler(protocolID, p.handleStream)
@@ -63,18 +61,14 @@ func (p *GokerPeer) Init(hosting bool, givenAddr string) {
 		fmt.Printf("Listening on specifc multiaddress (give this to other peers): \x1b[32m %s \x1b[0m\n", p.ThisHostLNAddress)
 	}
 
-	if hosting {
-		// Start as a bootstrap server
+	if hosting { // Start as a bootstrap server
 		fmt.Println("Running as a host...")
-		p.keyring.GeneratePQ()
+		p.keyring.GeneratePQ() // Generate first shared p and q
 		p.keyring.GenerateKeys()
 		fmt.Println("Initial keyring ready! awaiting peers.")
-		//go s.alert()
-	} else if givenAddr != "" {
-		// Connect to an existing bootstrap server
+	} else if givenAddr != "" { // Connect to an existing bootstrap server
 		fmt.Println("Joining host...")
 		p.connectToHost(givenAddr)
-		//go s.alert()
 	}
 
 	channelmanager.FNET_InitDoneChan <- struct{}{}

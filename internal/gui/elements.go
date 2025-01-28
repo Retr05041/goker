@@ -15,6 +15,7 @@ var (
 	lanAddress string
 
 	// Game
+	startGame bool
 	handGrid  = container.NewGridWithColumns(2) // Holds the hand images
 	boardGrid = container.NewGridWithColumns(5) // Holds the board iamges
 
@@ -25,6 +26,8 @@ var (
 )
 
 func initElements() {
+	startGame = false
+
 	betSlider.Step = 1
 	betSlider.OnChanged = func(f float64) {
 		valueLabel.SetText(fmt.Sprintf("$%.0f", f))

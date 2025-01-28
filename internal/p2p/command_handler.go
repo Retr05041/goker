@@ -1,8 +1,10 @@
 package p2p
 
 import (
+	"bufio"
 	"context"
 	"fmt"
+	"goker/internal/channelmanager"
 	"io"
 	"log"
 	"strings"
@@ -24,6 +26,71 @@ func (p *GokerPeer) ExecuteCommand(command Command) {
 func (p *GokerPeer) RespondToCommand(command Command, stream network.Stream) {
 	command.Respond(p, stream)
 }
+
+// Handle incoming streams
+// If it's a new host in the network, assume it's waiting for the peer list. Else, Assume it's a command
+func (p *GokerPeer) handleStream(stream network.Stream) {
+	defer stream.Close()
+	fmt.Println("New stream detected... getting command.")
+
+	// Read incoming command
+	var message strings.Builder
+	reader := bufio.NewReader(stream)
+	for {
+		// Read line by line
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			log.Println("handleStream: error reading from stream: %w", err)
+		}
+
+		// Check for the end marker
+		if strings.TrimSpace(line) == "\\END" {
+			break
+		}
+
+		// Append the line to the payload
+		message.WriteString(line)
+	}
+
+	cleanedMessage := strings.TrimSpace(message.String())
+
+	// Split the command and the payload
+	parts := strings.SplitN(cleanedMessage, " ", 2)
+	command := parts[0]
+	fmt.Println(command)
+	var payload string
+	if len(parts) > 1 {
+		payload = parts[1]
+	}
+
+	// Process the command based on the message
+	switch command {
+	case "CMDgetpeers": // Send peerlist to just this stream
+		fmt.Println("Recieved peer list request")
+		peerList := p.getPeerList()
+		_, err := stream.Write([]byte(peerList)) // Ensure the response is newline-terminated
+		if err != nil {
+			log.Printf("Failed to send peer list: %v", err)
+		}
+	case "CMDpqrequest":
+		fmt.Println("Recieved PQ Request")
+		p.RespondToCommand(&PQRequestCommand{}, stream)
+	case "CMDprotocolFS": // First step of Protocol
+		fmt.Println("Recieved protocols first step command")
+		p.deck.SetDeck(payload)
+		p.RespondToCommand(&ProtocolFirstStepCommand{}, stream)
+	case "CMDprotocolSS": // Second step of Protocol
+		fmt.Println("Recieved protocols second step command")
+		p.deck.SetDeck(payload)
+		p.RespondToCommand(&ProtocolFirstStepCommand{}, stream)
+	case "CMDstartround":
+		fmt.Println("Recieved start round command")
+		p.RespondToCommand(&StartRoundCommand{}, stream)
+	default:
+		log.Printf("Unknown Response Recieved: %s\n", cleanedMessage)
+	}
+}
+
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -69,11 +136,13 @@ func (pq *PQRequestCommand) Respond(peer *GokerPeer, sendingStream network.Strea
 	}
 }
 
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+
 // / ### PROTOCOL ###
-type ProtocolFirstStep struct{}
+type ProtocolFirstStepCommand struct{}
 
 // Send deck to every peer, allow them to shuffle and encrypt the deck
-func (sp *ProtocolFirstStep) Execute(peer *GokerPeer) {
+func (sp *ProtocolFirstStepCommand) Execute(peer *GokerPeer) {
 	peer.EncryptAllWithGlobalKeys()
 	peer.deck.ShuffleRoundDeck()
 
@@ -114,7 +183,7 @@ func (sp *ProtocolFirstStep) Execute(peer *GokerPeer) {
 }
 
 // Respond to a protocol's first command - Encrypt with global keys, shuffle, then send back - when this is called a new deck should be set already
-func (sp *ProtocolFirstStep) Respond(peer *GokerPeer, sendingStream network.Stream) {
+func (sp *ProtocolFirstStepCommand) Respond(peer *GokerPeer, sendingStream network.Stream) {
 	// Encrypt the deck with your global keys, shuffle it, then create a new payload to send back
 	peer.EncryptAllWithGlobalKeys()
 	peer.deck.ShuffleRoundDeck()
@@ -127,10 +196,10 @@ func (sp *ProtocolFirstStep) Respond(peer *GokerPeer, sendingStream network.Stre
 	}
 }
 
-type ProtocolSecondStep struct{}
+type ProtocolSecondStepCommand struct{}
 
 // For getting others to encrypt with their variation keys
-func (sp *ProtocolSecondStep) Execute(peer *GokerPeer) {
+func (sp *ProtocolSecondStepCommand) Execute(peer *GokerPeer) {
 	// First, the host of the game (the one initialing the protocols steps) will encrypt with variations
 	peer.DecryptAllWithGlobalKeys() // Decrypt global keys
 	peer.EncryptAllWithVariation() // Add encryption to every card
@@ -172,7 +241,7 @@ func (sp *ProtocolSecondStep) Execute(peer *GokerPeer) {
 }
 
 // Respond to the protocols second command - Decrypt global keys, encrypt with variation, then send back- when this is called a new deck should be set already
-func (sp *ProtocolSecondStep) Respond(peer *GokerPeer, sendingStream network.Stream) {
+func (sp *ProtocolSecondStepCommand) Respond(peer *GokerPeer, sendingStream network.Stream) {
 	peer.DecryptAllWithGlobalKeys()
 	peer.EncryptAllWithVariation()
 	processedDeck := peer.deck.GenerateDeckPayload()
@@ -184,3 +253,38 @@ func (sp *ProtocolSecondStep) Respond(peer *GokerPeer, sendingStream network.Str
 	}
 }
 
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+
+type StartRoundCommand struct{}
+
+func (sg *StartRoundCommand) Execute(peer *GokerPeer) {
+		
+	peer.peerListMutex.Lock()
+	defer peer.peerListMutex.Unlock()
+
+	for peerID := range peer.peerList {
+		if peerID == peer.thisHost.ID() {
+			continue
+		}
+
+		// Create a new stream to the peer
+		stream, err := peer.thisHost.NewStream(context.Background(), peerID, protocolID)
+		if err != nil {
+			log.Printf("StarRoundCommand: Failed to create stream to peer %s: %v\n", peerID, err)
+			continue
+		}
+		defer stream.Close()
+
+		// Send the deck
+		_, err = stream.Write([]byte(fmt.Sprintf("CMDstartround\n\\END\n")))
+		if err != nil {
+			log.Printf("StartRoundCommand: Failed to send command to peer %s: %v\n", peerID, err)
+		} else {
+			fmt.Printf("StartRoundCommand: Sent command to peer %s\n", peerID)
+		}
+	}
+}
+
+func (sg *StartRoundCommand) Respond(peer *GokerPeer, sendingStream network.Stream) {
+	channelmanager.FNET_StartRoundChan <- true
+}

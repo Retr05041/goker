@@ -1,13 +1,11 @@
 package p2p
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"goker/internal/channelmanager"
 	"io"
 	"log"
-	"strings"
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/network"
@@ -28,100 +26,18 @@ func (p *GokerPeer) handleNotifications() {
 			// Connect to the new peer and update the peer list
 			p.handlePeerConnection(conn.RemotePeer(), conn.RemoteMultiaddr())
 			// Send an update to the game manager
-			channelmanager.FNET_NumOfPlayersChan <- p.NumOfPlayers
+			channelmanager.FNET_NumOfPlayersChan <- len(p.peerList)
 		},
 		DisconnectedF: func(n network.Network, conn network.Conn) { // On peer disconnect
 			fmt.Printf("NOTIFICATION: Disconnected from peer: %s\n", conn.RemotePeer())
 
 			p.handlePeerDisconnection(conn.RemotePeer())
-			channelmanager.FNET_NumOfPlayersChan <- p.NumOfPlayers
+			channelmanager.FNET_NumOfPlayersChan <- len(p.peerList)
 		},
 	})
 
 	// Run this function forever - IF YOU REMOVE THIS, THE PROGRAM WILL CLOSE
 	select {}
-}
-
-// Log connected peers - Ignore self - For debugging only
-func (p *GokerPeer) alert() {
-	fmt.Println("LOGGING HAS BEGUN")
-	for {
-		p.peerListMutex.Lock()
-		if len(p.peerList) > 1 { // Account for this host
-			fmt.Printf("Number of connected peers: %d\n", len(p.peerList)-1) // Account for this host
-			fmt.Printf("Connected to:\n")
-			for id, addrInfo := range p.peerList {
-				if id != p.thisHost.ID() {
-					fmt.Printf(" - %s (Addresses: %s)\n", id.String(), addrInfo.String())
-				}
-			}
-		} else {
-			fmt.Println("No connected peers.")
-		}
-		p.peerListMutex.Unlock()
-		time.Sleep(10 * time.Second) // Announce every 10 seconds
-	}
-}
-
-// Handle incoming streams
-// If it's a new host in the network, assume it's waiting for the peer list. Else, Assume it's a command
-func (p *GokerPeer) handleStream(stream network.Stream) {
-	defer stream.Close()
-	fmt.Println("New stream detected... getting command.")
-
-	// Read incoming command
-	var message strings.Builder
-	reader := bufio.NewReader(stream)
-	for {
-		// Read line by line
-		line, err := reader.ReadString('\n')
-		if err != nil {
-			log.Println("handleStream: error reading from stream: %w", err)
-		}
-
-		// Check for the end marker
-		if strings.TrimSpace(line) == "\\END" {
-			break
-		}
-
-		// Append the line to the payload
-		message.WriteString(line)
-	}
-
-	cleanedMessage := strings.TrimSpace(message.String())
-
-	// Split the command and the payload
-	parts := strings.SplitN(cleanedMessage, " ", 2)
-	command := parts[0]
-	fmt.Println(command)
-	var payload string
-	if len(parts) > 1 {
-		payload = parts[1]
-	}
-
-	// Process the command based on the message
-	switch command {
-	case "CMDgetpeers": // Send peerlist to just this stream
-		fmt.Println("Recieved peer list request")
-		peerList := p.getPeerList()
-		_, err := stream.Write([]byte(peerList)) // Ensure the response is newline-terminated
-		if err != nil {
-			log.Printf("Failed to send peer list: %v", err)
-		}
-	case "CMDpqrequest":
-		fmt.Println("Recieved PQ Request")
-		p.RespondToCommand(&PQRequestCommand{}, stream)
-	case "CMDprotocolFS": // First step of Protocol
-		fmt.Println("Recieved protocols first step command")
-		p.deck.SetDeck(payload)
-		p.RespondToCommand(&ProtocolFirstStep{}, stream)
-	case "CMDprotocolSS": // Second step of Protocol
-		fmt.Println("Recieved protocols second step command")
-		p.deck.SetDeck(payload)
-		p.RespondToCommand(&ProtocolFirstStep{}, stream)
-	default:
-		log.Printf("Unknown Response Recieved: %s\n", cleanedMessage)
-	}
 }
 
 // Function to connect to a hosting peer (bootstrapping)
@@ -173,6 +89,8 @@ func (p *GokerPeer) connectToHost(peerAddr string) {
 	p.setPeerList(string(peerListBytes))
 	fmt.Println("Received and set peerlist.")
 
+	// Since this peer is *connecting* to a host, it wont send a notification, so we need to update the gui here
+	channelmanager.FNET_NumOfPlayersChan <- len(p.peerList)
 	// Request P & Q upon successful connection and integration with the network
 	p.ExecuteCommand(&PQRequestCommand{})
 }
@@ -202,7 +120,6 @@ func (p *GokerPeer) handlePeerConnection(newPeerID peer.ID, newPeerAddr multiadd
 		return
 	}
 	fmt.Printf("Connected to new peer: %s\n", newPeerID)
-	p.NumOfPlayers++
 }
 
 // Handle existing peer disconnection - Called when the DisconnectF NOTIFICATION has been made
@@ -214,7 +131,6 @@ func (p *GokerPeer) handlePeerDisconnection(peerID peer.ID) {
 	if _, exists := p.peerList[peerID]; exists {
 		delete(p.peerList, peerID)
 		fmt.Printf("Peer %s disconnected and removed from peer list.\n", peerID)
-		p.NumOfPlayers--
 	} else {
 		log.Printf("Peer %s not found in peer list.\n", peerID)
 	}

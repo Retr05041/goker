@@ -6,8 +6,8 @@ import (
 
 var (
 	// Channels for user input (<- GUI)
-	FGUI_InitChan chan bool
-	FGUI_ActionChan    chan ActionType
+	FGUI_InitChan   chan bool
+	FGUI_ActionChan chan ActionType
 
 	// Channels for specific elements in the UI (-> GUI)
 	TGUI_HandChan    chan []*canvas.Image
@@ -17,8 +17,9 @@ var (
 	TGUI_AddressChan chan []string
 
 	// Channles for network
-	FNET_InitDoneChan     chan struct{}
-	FNET_NumOfPlayersChan chan int
+	FNET_InitDoneChan        chan struct{}
+	FNET_NumOfPlayersChan    chan int
+	FNET_StartRoundChan chan bool
 )
 
 type ActionType struct {
@@ -40,4 +41,5 @@ func Init() {
 
 	FNET_InitDoneChan = make(chan struct{})
 	FNET_NumOfPlayersChan = make(chan int)
+	FNET_StartRoundChan = make(chan bool)
 }

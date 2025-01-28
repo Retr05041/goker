@@ -2,6 +2,7 @@ package gui
 
 import (
 	"fmt"
+	"time"
 
 	"goker/internal/channelmanager"
 
@@ -55,6 +56,7 @@ func showMenuUI(givenWindow fyne.Window) {
 // Host UI is the same as connectedUI but without settings
 func showHostUI(givenWindow fyne.Window) {
 	playButton := widget.NewButton("Play", func() {
+		channelmanager.FGUI_ActionChan <- channelmanager.ActionType{Action: "startRound"}
 		showGameScreen(givenWindow)
 	})
 	copyLBAddrButton := widget.NewButton("Copy LB address", func() {
@@ -76,7 +78,25 @@ func showHostUI(givenWindow fyne.Window) {
 func showConnectedUI(myWindow fyne.Window) {
 	waiting := widget.NewLabel("Waiting for host to begin game!")
 	myWindow.SetContent(
-		container.NewCenter(waiting))
+		container.NewCenter(
+			container.NewVBox(numOfPlayers, waiting)))
+
+	// Goroutine to monitor the startGame variable
+	go func() {
+		for {
+			if startGame {
+				// Switch to the game screen on the main thread
+				fyne.CurrentApp().SendNotification(&fyne.Notification{
+					Title:   "Game Starting",
+					Content: "The host has started the game!",
+				})
+
+				showGameScreen(myWindow)
+				return
+			}
+			time.Sleep(100 * time.Millisecond) // Polling interval to avoid busy-waiting
+		}
+	}()
 }
 
 // Main game screen

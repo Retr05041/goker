@@ -73,6 +73,8 @@ func (gm *GameManager) listenForActions() {
 				}
 				<-channelmanager.FNET_InitDoneChan // Just wanna wait for network to catch up
 				channelmanager.TGUI_AddressChan <- []string{gm.network.ThisHostLBAddress, gm.network.ThisHostLNAddress}
+			case "startRound":
+				gm.network.ExecuteCommand(&p2p.StartRoundCommand{})
 			case "Raise":
 				// Handle raise action
 				fmt.Println("Handling Raise action")
