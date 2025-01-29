@@ -3,6 +3,7 @@ package p2p
 import (
 	"fmt"
 	"goker/internal/channelmanager"
+	"goker/internal/gamestate"
 	"goker/internal/sra"
 	"log"
 	"sync"
@@ -27,8 +28,7 @@ type GokerPeer struct {
 	keyring *sra.Keyring // Holds all encryption logic
 
 	// Data accessable to the gamemanager
-	Nickname  string
-	Nicknames []string // Everyone else's nicknames, in candidate list order to match with
+	gameState gamestate.GameState
 }
 
 func (p *GokerPeer) Init(hosting bool, givenAddr string) {
@@ -71,11 +71,8 @@ func (p *GokerPeer) Init(hosting bool, givenAddr string) {
 		p.connectToHost(givenAddr)
 	}
 
-	channelmanager.FNET_InitDoneChan <- struct{}{}
+
+	channelmanager.TFNET_GameStateChan <- p.gameState
 	// Handle notifications forever
 	go p.handleNotifications()
-}
-
-func (g *GokerPeer) DisplayDeck() {
-	g.deck.DisplayDeck()
 }

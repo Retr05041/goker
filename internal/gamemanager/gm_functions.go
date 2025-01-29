@@ -11,10 +11,10 @@ func (gm *GameManager) initHand() {
 		cardImage := canvas.NewImageFromFile("media/svg_playing_cards/backs/png_96_dpi/red.png")
 		cardImage.FillMode = canvas.ImageFillOriginal
 
-		gm.state.MyHand = append(gm.state.MyHand, cardImage)
+		gm.MyHand = append(gm.MyHand, cardImage)
 	}
 
-	channelmanager.TGUI_HandChan <- gm.state.MyHand // Send the new hand through the channel
+	channelmanager.TGUI_HandChan <- gm.MyHand // Send the new hand through the channel
 }
 
 // Setup board with back of cards
@@ -23,10 +23,10 @@ func (gm *GameManager) initBoard() {
 		cardImage := canvas.NewImageFromFile("media/svg_playing_cards/backs/png_96_dpi/red.png")
 		cardImage.FillMode = canvas.ImageFillOriginal
 
-		gm.state.Board = append(gm.state.Board, cardImage)
+		gm.Board = append(gm.Board, cardImage)
 	}
 
-	channelmanager.TGUI_BoardChan <- gm.state.Board
+	channelmanager.TGUI_BoardChan <- gm.Board
 }
 
 // Load two cards into your hand and update the grid
@@ -37,9 +37,9 @@ func (gm *GameManager) loadHand(cardOneName, cardTwoName string) {
 	cardTwo := canvas.NewImageFromFile("media/svg_playing_cards/fronts/png_96_dpi/" + cardTwoName + ".png")
 	cardTwo.FillMode = canvas.ImageFillOriginal
 
-	gm.state.MyHand[0] = cardOne
-	gm.state.MyHand[1] = cardTwo
-	channelmanager.TGUI_HandChan <- gm.state.MyHand
+	gm.MyHand[0] = cardOne
+	gm.MyHand[1] = cardTwo
+	channelmanager.TGUI_HandChan <- gm.MyHand
 }
 
 func (gm *GameManager) loadFlop(cardOneName, cardTwoName, cardThreeName string) {
@@ -52,24 +52,24 @@ func (gm *GameManager) loadFlop(cardOneName, cardTwoName, cardThreeName string) 
 	cardThree := canvas.NewImageFromFile("media/svg_playing_cards/fronts/png_96_dpi/" + cardThreeName + ".png")
 	cardThree.FillMode = canvas.ImageFillOriginal
 
-	gm.state.Board[0] = cardOne
-	gm.state.Board[1] = cardTwo
-	gm.state.Board[2] = cardThree
-	channelmanager.TGUI_BoardChan <- gm.state.Board
+	gm.Board[0] = cardOne
+	gm.Board[1] = cardTwo
+	gm.Board[2] = cardThree
+	channelmanager.TGUI_BoardChan <- gm.Board
 }
 
 func (gm *GameManager) loadTurn(cardName string) {
 	card := canvas.NewImageFromFile("media/svg_playing_cards/fronts/png_96_dpi/" + cardName + ".png")
 	card.FillMode = canvas.ImageFillOriginal
 
-	gm.state.Board[3] = card
-	channelmanager.TGUI_BoardChan <- gm.state.Board
+	gm.Board[3] = card
+	channelmanager.TGUI_BoardChan <- gm.Board
 }
 
 func (gm *GameManager) loadRiver(cardName string) {
 	card := canvas.NewImageFromFile("media/svg_playing_cards/fronts/png_96_dpi/" + cardName + ".png")
 	card.FillMode = canvas.ImageFillOriginal
 
-	gm.state.Board[4] = card
-	channelmanager.TGUI_BoardChan <- gm.state.Board
+	gm.Board[4] = card
+	channelmanager.TGUI_BoardChan <- gm.Board
 }

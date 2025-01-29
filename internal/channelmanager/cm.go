@@ -1,6 +1,8 @@
 package channelmanager
 
 import (
+	"goker/internal/gamestate"
+
 	"fyne.io/fyne/v2/canvas"
 )
 
@@ -16,17 +18,21 @@ var (
 	TGUI_MyMoneyChan chan float64
 	TGUI_AddressChan chan []string
 
-	// Channles for network
-	FNET_InitDoneChan        chan struct{}
-	FNET_NumOfPlayersChan    chan int
-	FNET_StartRoundChan chan bool
+	// Channles for network (<- Network)
+	FNET_NumOfPlayersChan chan int
+	FNET_StartRoundChan   chan bool
+
+	// Game state to be sent from game manager to network - Singular channels will be used to communicate with GUI
+	TFNET_GameStateChan chan gamestate.GameState // We don't make this a pointer so we can work with copies
 )
 
+// Actions made by the user on the GUI
 type ActionType struct {
 	Action string
 	DataF  *float64
 	DataS  *string
 }
+
 
 // Initialize all channels
 func Init() {
@@ -39,7 +45,8 @@ func Init() {
 	TGUI_MyMoneyChan = make(chan float64)
 	TGUI_AddressChan = make(chan []string)
 
-	FNET_InitDoneChan = make(chan struct{})
 	FNET_NumOfPlayersChan = make(chan int)
 	FNET_StartRoundChan = make(chan bool)
+
+	TFNET_GameStateChan = make(chan gamestate.GameState)
 }

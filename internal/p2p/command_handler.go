@@ -258,7 +258,6 @@ func (sp *ProtocolSecondStepCommand) Respond(peer *GokerPeer, sendingStream netw
 type StartRoundCommand struct{}
 
 func (sg *StartRoundCommand) Execute(peer *GokerPeer) {
-		
 	peer.peerListMutex.Lock()
 	defer peer.peerListMutex.Unlock()
 
@@ -275,7 +274,6 @@ func (sg *StartRoundCommand) Execute(peer *GokerPeer) {
 		}
 		defer stream.Close()
 
-		// Send the deck
 		_, err = stream.Write([]byte(fmt.Sprintf("CMDstartround\n\\END\n")))
 		if err != nil {
 			log.Printf("StartRoundCommand: Failed to send command to peer %s: %v\n", peerID, err)
@@ -288,3 +286,9 @@ func (sg *StartRoundCommand) Execute(peer *GokerPeer) {
 func (sg *StartRoundCommand) Respond(peer *GokerPeer, sendingStream network.Stream) {
 	channelmanager.FNET_StartRoundChan <- true
 }
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+
+type RaiseCommand struct{}
+
+// TODO: Implement this.

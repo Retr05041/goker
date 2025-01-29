@@ -85,12 +85,6 @@ func showConnectedUI(myWindow fyne.Window) {
 	go func() {
 		for {
 			if startGame {
-				// Switch to the game screen on the main thread
-				fyne.CurrentApp().SendNotification(&fyne.Notification{
-					Title:   "Game Starting",
-					Content: "The host has started the game!",
-				})
-
 				showGameScreen(myWindow)
 				return
 			}
