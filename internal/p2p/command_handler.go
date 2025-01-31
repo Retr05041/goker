@@ -135,6 +135,9 @@ func (nr *NicknameRequestCommand) Execute(peer *GokerPeer) {
 	defer peer.peerListMutex.Unlock()
 
 	for peerID := range peer.peerList {
+		if peerID == peer.thisHost.ID() {
+			continue
+		}
 		if _, exists := peer.peerNicknames[peerID]; exists { // If we already have their nickname don't bother getting it again
 			continue
 		}

@@ -53,6 +53,7 @@ func (p *GokerPeer) Init(nickname string, hosting bool, givenAddr string) {
 
 	p.thisHost = h
 	p.peerList = make(map[peer.ID]multiaddr.Multiaddr)
+	p.peerNicknames = make(map[peer.ID]string)
 	p.thisHostsNickname = nickname
 
 	// Listen for incoming connections - Use an anonymous function atm since we don't want to do much
@@ -82,6 +83,9 @@ func (p *GokerPeer) Init(nickname string, hosting bool, givenAddr string) {
 
 	// Handle State changes forever
 	go p.handleStateChanges()
+
+	// Start as host 
+	go p.handleNotifications()
 
 	// To tell the game mananger the network is ready to go
 	channelmanager.FNET_NetActionDoneChan <- struct{}{}

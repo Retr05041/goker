@@ -3,7 +3,7 @@ package p2p
 import (
 	"context"
 	"fmt"
-	"goker/internal/channelmanager"
+	//"goker/internal/channelmanager"
 	"log"
 	"time"
 
@@ -23,13 +23,15 @@ func (p *GokerPeer) handleNotifications() {
 
 			// Connect to the new peer and update the peer list
 			p.handlePeerConnection(conn.RemotePeer(), conn.RemoteMultiaddr())
-			channelmanager.FNET_NumOfPlayersChan <- len(p.peerList)
+			//channelmanager.FNET_NumOfPlayersChan <- len(p.peerList)
+			// Request Nickname from new peer
+			p.ExecuteCommand(&NicknameRequestCommand{})
 		},
 		DisconnectedF: func(n network.Network, conn network.Conn) { // On peer disconnect
 			fmt.Printf("NOTIFICATION: Disconnected from peer: %s\n", conn.RemotePeer())
 
 			p.handlePeerDisconnection(conn.RemotePeer())
-			channelmanager.FNET_NumOfPlayersChan <- len(p.peerList)
+			//channelmanager.FNET_NumOfPlayersChan <- len(p.peerList)
 		},
 	})
 
@@ -63,8 +65,6 @@ func (p *GokerPeer) handlePeerConnection(newPeerID peer.ID, newPeerAddr multiadd
 	}
 	fmt.Printf("Connected to new peer: %s\n", newPeerID)
 
-	// Request Nickname from new peer
-	p.ExecuteCommand(&NicknameRequestCommand{})
 }
 
 // Handle existing peer disconnection - Called when the DisconnectF NOTIFICATION has been made
