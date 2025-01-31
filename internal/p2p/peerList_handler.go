@@ -34,7 +34,7 @@ func (p *GokerPeer) addPeer(peerID peer.ID, addr multiaddr.Multiaddr) {
 }
 
 // Set the peer list (Given the output from the getPeerList function) and connect to all peers
-func (p *GokerPeer) setPeerList(peerList string) {
+func (p *GokerPeer) setPeerListAndConnect(peerList string) {
 	p.peerListMutex.Lock()
 	defer p.peerListMutex.Unlock()
 

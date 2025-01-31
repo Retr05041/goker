@@ -1,7 +1,6 @@
 package gui
 
 import (
-	"fmt"
 	"time"
 
 	"goker/internal/channelmanager"
@@ -14,43 +13,38 @@ import (
 
 // Main Menu
 func showMenuUI(givenWindow fyne.Window) {
-	var hostOrConnect string
 	banner := canvas.NewText("Goker", BLUE)
-	banner.TextSize = 24
+	banner.TextSize = 32
 	banner.TextStyle = fyne.TextStyle{Bold: true, Italic: false}
 	banner.Alignment = fyne.TextAlignCenter
 
+	nickname := widget.NewEntry()
+	nickname.SetPlaceHolder("Nickname...")
+
 	inputedAddress := widget.NewEntry()
 	inputedAddress.SetPlaceHolder("Host address...")
-	inputedAddress.Disable()
 
-	submit := widget.NewButton("Submit", func() {
-		fmt.Println("Choice made: ", hostOrConnect)
-		if hostOrConnect == "Connect" {
-			channelmanager.FGUI_ActionChan <- channelmanager.ActionType{Action: "hostOrConnectPressed", DataS: &inputedAddress.Text}
-			showConnectedUI(givenWindow)
-		} else if hostOrConnect == "Host" {
-			channelmanager.FGUI_ActionChan <- channelmanager.ActionType{Action: "hostOrConnectPressed", DataS: nil}
+	host := widget.NewButton("Host", func() {
+		if nickname.Text != "" {
+			channelmanager.FGUI_ActionChan <- channelmanager.ActionType{Action: "hostOrConnectPressed", DataS: []string{nickname.Text}}
 			showHostUI(givenWindow)
 		}
 	})
-	submit.Disable()
 
-	peerType := widget.NewRadioGroup([]string{"Host", "Connect"}, func(value string) {
-		submit.Enable()
-		if value == "Connect" {
-			inputedAddress.Enable()
-		} else {
-			inputedAddress.Disable()
+	connect := widget.NewButton("Connect", func() {
+		if nickname.Text != "" {
+			if inputedAddress.Text != "" {
+				channelmanager.FGUI_ActionChan <- channelmanager.ActionType{Action: "hostOrConnectPressed", DataS: []string{nickname.Text, inputedAddress.Text}}
+				showConnectedUI(givenWindow)
+			}
 		}
-		hostOrConnect = value
 	})
 
 	givenWindow.SetContent(
 		container.NewCenter(
 			container.NewGridWrap(
-				fyne.NewSize(float32(MAX_WIDTH), float32(MAX_HEIGHT)),
-				container.NewVBox(banner, peerType, inputedAddress, submit))))
+				fyne.NewSize(float32(MAX_WIDTH)/2, float32(MAX_HEIGHT)/2),
+				container.NewVBox(banner, nickname, host, container.NewGridWithColumns(2, connect, inputedAddress)))))
 }
 
 // Host UI is the same as connectedUI but without settings
@@ -95,12 +89,13 @@ func showConnectedUI(myWindow fyne.Window) {
 
 // Main game screen
 func showGameScreen(givenWindow fyne.Window) {
+	givenWindow.Resize(fyne.NewSize(float32(MAX_WIDTH), float32(MAX_HEIGHT))) // Ensure size consistency
 
 	foldButton := widget.NewButton("Fold", func() {
 		channelmanager.FGUI_ActionChan <- channelmanager.ActionType{Action: "Fold"}
 	})
 	raiseButton := widget.NewButton("Raise", func() {
-		channelmanager.FGUI_ActionChan <- channelmanager.ActionType{Action: "Raise", DataF: &betSlider.Value}
+		channelmanager.FGUI_ActionChan <- channelmanager.ActionType{Action: "Raise", DataF: betSlider.Value}
 	})
 	callButton := widget.NewButton("Call", func() {
 		channelmanager.FGUI_ActionChan <- channelmanager.ActionType{Action: "Call"}

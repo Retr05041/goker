@@ -12,6 +12,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/network"
 )
 
+// Uses Command Design Pattern
 type Command interface {
 	Execute(peer *GokerPeer)
 	Respond(peer *GokerPeer, sendingStream network.Stream)
@@ -27,8 +28,7 @@ func (p *GokerPeer) RespondToCommand(command Command, stream network.Stream) {
 	command.Respond(p, stream)
 }
 
-// Handle incoming streams
-// If it's a new host in the network, assume it's waiting for the peer list. Else, Assume it's a command
+// Handle incoming streams (should be commands only)
 func (p *GokerPeer) handleStream(stream network.Stream) {
 	defer stream.Close()
 	fmt.Println("New stream detected... getting command.")
@@ -67,11 +67,7 @@ func (p *GokerPeer) handleStream(stream network.Stream) {
 	switch command {
 	case "CMDgetpeers": // Send peerlist to just this stream
 		fmt.Println("Recieved peer list request")
-		peerList := p.getPeerList()
-		_, err := stream.Write([]byte(peerList)) // Ensure the response is newline-terminated
-		if err != nil {
-			log.Printf("Failed to send peer list: %v", err)
-		}
+		p.RespondToCommand(&GetPeerListCommand{}, stream)
 	case "CMDpqrequest":
 		fmt.Println("Recieved PQ Request")
 		p.RespondToCommand(&PQRequestCommand{}, stream)
@@ -86,11 +82,98 @@ func (p *GokerPeer) handleStream(stream network.Stream) {
 	case "CMDstartround":
 		fmt.Println("Recieved start round command")
 		p.RespondToCommand(&StartRoundCommand{}, stream)
+	case "CMDnicknamerequest":
+		log.Println("Recieved nickname request command")
+		p.RespondToCommand(&NicknameRequestCommand{}, stream)
 	default:
 		log.Printf("Unknown Response Recieved: %s\n", cleanedMessage)
 	}
 }
 
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+
+type GetPeerListCommand struct{}
+
+func (gpl *GetPeerListCommand) Execute(peer *GokerPeer) {
+	stream, err := peer.thisHost.NewStream(context.Background(), peer.sessionHost, protocolID)
+	if err != nil {
+		log.Printf("GetPeerListCommand: Failed to create stream to host %s: %v\n", peer.sessionHost, err)
+		return
+	}
+	defer stream.Close()
+
+	// Aquire and set peerlist
+	_, err = stream.Write([]byte("CMDgetpeers\n\\END\n"))
+	if err != nil {
+		log.Fatalf("GetPeerListCommand: Failed to send CMDgetpeers command: %v", err)
+	}
+
+	peerListBytes, err := io.ReadAll(stream)
+	if err != nil {
+		log.Fatalf("GetPeerListCommand: Failed to read peer list: %v", err)
+	}
+
+	peer.setPeerListAndConnect(string(peerListBytes))
+	log.Println("GetPeerListCommand: Received and set peerlist.")
+}
+
+func (gpl *GetPeerListCommand) Respond(peer *GokerPeer, sendingStream network.Stream) {
+	_, err := sendingStream.Write([]byte(peer.getPeerList())) 
+	if err != nil {
+		log.Printf("GetPeerlistCommand: Failed to send peer list: %v", err)
+	}
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+
+type NicknameRequestCommand struct{} // Loops through every peer in the peer list, and for any we don't have nicknames for, request one
+
+func (nr *NicknameRequestCommand) Execute(peer *GokerPeer) {
+	peer.peerListMutex.Lock()
+	defer peer.peerListMutex.Unlock()
+
+	for peerID := range peer.peerList {
+		if _, exists := peer.peerNicknames[peerID]; exists { // If we already have their nickname don't bother getting it again
+			continue
+		}
+
+		// Create a new stream to the peer
+		stream, err := peer.thisHost.NewStream(context.Background(), peerID, protocolID)
+		if err != nil {
+			log.Printf("NicknameRequest: Failed to create stream to host %s: %v\n", peerID, err)
+			return
+		}
+		defer stream.Close()
+
+		_, err = stream.Write([]byte("CMDnicknamerequest\n\\END\n"))
+		if err != nil {
+			log.Printf("NicknameRequest: Failed to send command to peer%s: %v\n", peerID, err)
+		} else {
+			fmt.Printf("NicknameRequest: Sent command to peer%s\n", peerID)
+		}
+
+		// Read the response - we do this as they won't be sending an actual *command* back, just some text
+		responseBytes, err := io.ReadAll(stream)
+		if err != nil {
+			log.Printf("NicknameRequest: Failed to read response from host %s: %v\n", peerID, err)
+		} else {
+			peerNickname := strings.Split(string(responseBytes), "\n")
+			fmt.Printf("NicknameRequest: Received response from peer: %s -- Nickname: %s\n", peerID, peerNickname[0])
+			peer.peerNicknames[peerID] = peerNickname[0]
+		}
+	}
+}
+
+func (nr *NicknameRequestCommand) Respond(peer *GokerPeer, sendingStream network.Stream) {
+	_, err := sendingStream.Write([]byte(peer.thisHostsNickname))
+	if err != nil {
+		log.Printf("NicknameRequest: Failed to send nickname to peer %s: %v\n", sendingStream.Conn().RemotePeer(), err)
+	} else {
+		fmt.Printf("NicknameRequest: Sent nickname to peer %s\n", sendingStream.Conn().RemotePeer())
+	}
+}
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -119,7 +202,7 @@ func (pq *PQRequestCommand) Execute(peer *GokerPeer) {
 		log.Printf("PQRequest: Failed to read response from host %s: %v\n", peer.sessionHost, err)
 	} else {
 		pq := strings.Split(string(responseBytes), "\n")
-		fmt.Printf("PQRequest: Received response from host: %s P: %s -- Q: %s\n", peer.sessionHost, pq[0], pq[1])
+		fmt.Printf("PQRequest: Received response from host: %s\n", peer.sessionHost)
 		peer.keyring.SetPQ(pq[0], pq[1]) // Set this servers p and q
 		peer.keyring.GenerateKeys()
 	}

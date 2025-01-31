@@ -11,7 +11,7 @@ import (
 )
 
 type GameManager struct {
-	state   gamestate.GameState
+	state   *gamestate.GameState
 	network *p2p.GokerPeer
 
 	MyNickname string
@@ -37,27 +37,32 @@ func (gm *GameManager) listenForActions() {
 			case "Init":
 				gm.initHand()
 				gm.initBoard()
+				gm.state = new(gamestate.GameState)
+			case "hostOrConnectPressed":
+				gm.network = new(p2p.GokerPeer)
+
+				if len(givenAction.DataS) == 1 {
+					go gm.network.Init(givenAction.DataS[0], true, "")
+				} else {
+					go gm.network.Init(givenAction.DataS[0], false, givenAction.DataS[1])
+				}
+				<- channelmanager.FNET_NetActionDoneChan // Wait for network to be done setting up
+				channelmanager.TGUI_AddressChan <- []string{gm.network.ThisHostLBAddress, gm.network.ThisHostLNAddress}
+			case "startRound": // TODO: This action should gather table rules for the state
+				gm.state.FreshState(nil, nil) // Initialise the state for this round (doesn't affect turn order or peers etc.)
+
 				channelmanager.TGUI_MyMoneyChan <- gm.state.StartingCash
 				channelmanager.TGUI_PotChan <- gm.state.Pot
-			case "hostOrConnectPressed":
-				fmt.Println("Got here!")
-				gm.network = new(p2p.GokerPeer)
-				if givenAction.DataS == nil {
-					go gm.network.Init(true, "")
-				} else {
-					go gm.network.Init(false, *givenAction.DataS)
-				}
-				gm.state = <- channelmanager.TFNET_GameStateChan // Wait for network to be done setting up, should give us a new state
-				channelmanager.TGUI_AddressChan <- []string{gm.network.ThisHostLBAddress, gm.network.ThisHostLNAddress}
-			case "startRound":
+				channelmanager.TFNET_GameStateChan <- channelmanager.StateChange{Action: "startRound", State: *gm.state, DataS: []string{gm.MyNickname}} // Send the state with the lobby rules to the network for population
+				<- channelmanager.FNET_NetActionDoneChan // Again wait for the network to respond
 				gm.network.ExecuteCommand(&p2p.StartRoundCommand{})
 			case "Raise":
 				// Handle raise action
 				fmt.Println("Handling Raise action")
 				// Update state
-				gm.state.PlayersMoney[gm.MyNickname] -= *givenAction.DataF
-				gm.state.Pot += *givenAction.DataF
-				gm.state.BetHistory[gm.MyNickname] = *givenAction.DataF // Update state
+				gm.state.PlayersMoney[gm.MyNickname] -= givenAction.DataF
+				gm.state.Pot += givenAction.DataF
+				gm.state.BetHistory[gm.MyNickname] = givenAction.DataF // Update state
 
 				// Update GUI
 				channelmanager.TGUI_MyMoneyChan <- gm.state.PlayersMoney[gm.MyNickname]

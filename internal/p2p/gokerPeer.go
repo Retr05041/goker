@@ -12,26 +12,34 @@ import (
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
+	"github.com/libp2p/go-libp2p/core/protocol"
 )
+
+var protocolID = protocol.ID("/goker/1.0.0")
 
 type GokerPeer struct {
 	// Network logic
-	thisHost          host.Host                       // This host
-	ThisHostLBAddress string                          // This hosts loopback address (127.0.0.1)
-	ThisHostLNAddress string                          // This hosts LAN address
-	sessionHost       peer.ID                         // Host of the current network (This will change has hosts drop out, but will be used to request specific things)
-	peerList          map[peer.ID]multiaddr.Multiaddr // A map for managing peer connections
-	peerListMutex     sync.Mutex                      // Mutex for accessing peer map
+	thisHost          host.Host // This host
+	ThisHostLBAddress string    // This hosts loopback address (127.0.0.1)
+	ThisHostLNAddress string    // This hosts LAN address
+
+	sessionHost   peer.ID                         // Host of the current network (This will change has hosts drop out, but will be used to request specific things)
+	candidateList []peer.ID                       // Add peer ID's as they connect :: Used for who's hosting next and turn order
+
+	peerList      map[peer.ID]multiaddr.Multiaddr // A map for managing peer connections
+	peerListMutex sync.Mutex                      // Mutex for accessing peer map
+	peerNicknames map[peer.ID]string              // Gotten through requesting a nickname from any new peer joining the the network
 
 	// Other
 	deck    *deckInfo    // Holds all deck logic (cards, deck operations etc.)
 	keyring *sra.Keyring // Holds all encryption logic
 
-	// Data accessable to the gamemanager
+	// Network copy of gamestate
 	gameState gamestate.GameState
+	thisHostsNickname string
 }
 
-func (p *GokerPeer) Init(hosting bool, givenAddr string) {
+func (p *GokerPeer) Init(nickname string, hosting bool, givenAddr string) {
 	p.keyring = new(sra.Keyring)
 	p.deck = new(deckInfo)
 	p.deck.GenerateRefDeck("mysupersecretkey")
@@ -45,6 +53,7 @@ func (p *GokerPeer) Init(hosting bool, givenAddr string) {
 
 	p.thisHost = h
 	p.peerList = make(map[peer.ID]multiaddr.Multiaddr)
+	p.thisHostsNickname = nickname
 
 	// Listen for incoming connections - Use an anonymous function atm since we don't want to do much
 	h.SetStreamHandler(protocolID, p.handleStream)
@@ -71,8 +80,23 @@ func (p *GokerPeer) Init(hosting bool, givenAddr string) {
 		p.connectToHost(givenAddr)
 	}
 
+	// Handle State changes forever
+	go p.handleStateChanges()
 
-	channelmanager.TFNET_GameStateChan <- p.gameState
-	// Handle notifications forever
-	go p.handleNotifications()
+	// To tell the game mananger the network is ready to go
+	channelmanager.FNET_NetActionDoneChan <- struct{}{}
+}
+
+// TODO: Implement handleStateChanges
+// Handles state changes on the local side
+func (p *GokerPeer) handleStateChanges() {
+	for {
+		select {
+		case givenAction := <-channelmanager.TFNET_GameStateChan:
+			switch givenAction.Action {
+			case "startround": // Set: Nickanes -> Peer ID's | Turn Order ->
+
+			}
+		}
+	}
 }
