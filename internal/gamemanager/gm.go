@@ -22,6 +22,7 @@ type GameManager struct {
 func (gm *GameManager) StartGame() {
 	// Init channels
 	channelmanager.Init()
+
 	go gm.listenForActions()
 
 	gui.Init()
@@ -53,7 +54,7 @@ func (gm *GameManager) listenForActions() {
 
 				channelmanager.TGUI_MyMoneyChan <- gm.state.StartingCash
 				channelmanager.TGUI_PotChan <- gm.state.Pot
-				channelmanager.TFNET_GameStateChan <- channelmanager.StateChange{Action: "startRound", State: *gm.state, DataS: []string{gm.MyNickname}} // Send the state with the lobby rules to the network for population
+				channelmanager.TFNET_GameStateChan <- channelmanager.StateChange{Action: "startround", State: *gm.state} // Send the state with the lobby rules to the network for population
 				<- channelmanager.FNET_NetActionDoneChan // Again wait for the network to respond
 				gm.network.ExecuteCommand(&p2p.StartRoundCommand{})
 			case "Raise":

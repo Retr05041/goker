@@ -138,7 +138,7 @@ func (nr *NicknameRequestCommand) Execute(peer *GokerPeer) {
 		if peerID == peer.thisHost.ID() {
 			continue
 		}
-		if _, exists := peer.peerNicknames[peerID]; exists { // If we already have their nickname don't bother getting it again
+		if _, exists := peer.gameState.Players[peerID]; exists { // If we already have their nickname don't bother getting it again
 			continue
 		}
 
@@ -164,13 +164,14 @@ func (nr *NicknameRequestCommand) Execute(peer *GokerPeer) {
 		} else {
 			peerNickname := strings.Split(string(responseBytes), "\n")
 			fmt.Printf("NicknameRequest: Received response from peer: %s -- Nickname: %s\n", peerID, peerNickname[0])
-			peer.peerNicknames[peerID] = peerNickname[0]
+			peer.gameState.AddPeerToState(peerID, peerNickname[0]) // Finally add peer to gamestate
+			// TODO: This is where we should send the state BACK to the gamemanager
 		}
 	}
 }
 
 func (nr *NicknameRequestCommand) Respond(peer *GokerPeer, sendingStream network.Stream) {
-	_, err := sendingStream.Write([]byte(peer.thisHostsNickname))
+	_, err := sendingStream.Write([]byte(peer.gameState.Players[peer.thisHost.ID()]))
 	if err != nil {
 		log.Printf("NicknameRequest: Failed to send nickname to peer %s: %v\n", sendingStream.Conn().RemotePeer(), err)
 	} else {

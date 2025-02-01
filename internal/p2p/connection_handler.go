@@ -46,6 +46,6 @@ func (p *GokerPeer) connectToHost(peerAddr string) {
 	// Tell GUI to change the number of players
 	channelmanager.FNET_NumOfPlayersChan <- len(p.peerList)
 
-	// Request Nicknames from everyone
+	// Request Nicknames and add them to the state
 	p.ExecuteCommand(&NicknameRequestCommand{})
 }

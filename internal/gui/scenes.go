@@ -1,8 +1,6 @@
 package gui
 
 import (
-	"time"
-
 	"goker/internal/channelmanager"
 
 	"fyne.io/fyne/v2"
@@ -10,6 +8,13 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/widget"
 )
+
+func setWindowContent(window fyne.Window, content fyne.CanvasObject) {
+	window.Resize(fyne.NewSize(float32(MAX_WIDTH), float32(MAX_HEIGHT))) // Ensure size consistency
+	if window.Content() != content {
+		window.SetContent(content)
+	}
+}
 
 // Main Menu
 func showMenuUI(givenWindow fyne.Window) {
@@ -40,7 +45,7 @@ func showMenuUI(givenWindow fyne.Window) {
 		}
 	})
 
-	givenWindow.SetContent(
+	setWindowContent(givenWindow,
 		container.NewCenter(
 			container.NewGridWrap(
 				fyne.NewSize(float32(MAX_WIDTH)/2, float32(MAX_HEIGHT)/2),
@@ -60,7 +65,7 @@ func showHostUI(givenWindow fyne.Window) {
 		givenWindow.Clipboard().SetContent(lanAddress)
 	})
 
-	givenWindow.SetContent(
+	setWindowContent(givenWindow,
 		container.NewCenter(
 			container.NewVBox(
 				numOfPlayers,
@@ -69,28 +74,21 @@ func showHostUI(givenWindow fyne.Window) {
 }
 
 // Connected UI is just a waiting area for the host to start
-func showConnectedUI(myWindow fyne.Window) {
+func showConnectedUI(givenWindow fyne.Window) {
 	waiting := widget.NewLabel("Waiting for host to begin game!")
-	myWindow.SetContent(
+	setWindowContent(givenWindow,
 		container.NewCenter(
 			container.NewVBox(numOfPlayers, waiting)))
 
 	// Goroutine to monitor the startGame variable
 	go func() {
-		for {
-			if startGame {
-				showGameScreen(myWindow)
-				return
-			}
-			time.Sleep(100 * time.Millisecond) // Polling interval to avoid busy-waiting
-		}
+		<- channelmanager.FNET_StartRoundChan
+		showGameScreen(givenWindow)
 	}()
 }
 
 // Main game screen
 func showGameScreen(givenWindow fyne.Window) {
-	givenWindow.Resize(fyne.NewSize(float32(MAX_WIDTH), float32(MAX_HEIGHT))) // Ensure size consistency
-
 	foldButton := widget.NewButton("Fold", func() {
 		channelmanager.FGUI_ActionChan <- channelmanager.ActionType{Action: "Fold"}
 	})
@@ -104,7 +102,7 @@ func showGameScreen(givenWindow fyne.Window) {
 		channelmanager.FGUI_ActionChan <- channelmanager.ActionType{Action: "Check"}
 	})
 
-	givenWindow.SetContent(
+	setWindowContent(givenWindow,
 		container.NewCenter(
 			container.NewVBox(
 				container.NewCenter(potLabel),
