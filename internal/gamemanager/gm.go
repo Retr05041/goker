@@ -61,12 +61,12 @@ func (gm *GameManager) listenForActions() {
 				// Handle raise action
 				fmt.Println("Handling Raise action")
 				// Update state
-				gm.state.PlayersMoney[gm.MyNickname] -= givenAction.DataF
+				gm.state.PlayersMoney[gm.network.ThisHost.ID()] -= givenAction.DataF
 				gm.state.Pot += givenAction.DataF
-				gm.state.BetHistory[gm.MyNickname] = givenAction.DataF // Update state
+				gm.state.BetHistory[gm.network.ThisHost.ID()] = givenAction.DataF // Update state
 
 				// Update GUI
-				channelmanager.TGUI_MyMoneyChan <- gm.state.PlayersMoney[gm.MyNickname]
+				channelmanager.TGUI_MyMoneyChan <- gm.state.PlayersMoney[gm.network.ThisHost.ID()]
 				channelmanager.TGUI_PotChan <- gm.state.Pot
 
 				// Send newly updated state to the network for processing

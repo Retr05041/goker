@@ -31,14 +31,14 @@ func (p *GokerPeer) connectToHost(peerAddr string) {
 	}
 
 	// Connect to the host
-	if err := p.thisHost.Connect(ctx, *pinfo); err != nil {
+	if err := p.ThisHost.Connect(ctx, *pinfo); err != nil {
 		log.Fatalf("Failed to connect to bootstrap peer: %v", err)
 	}
 
 	log.Printf("Connected to host: %s\n", pinfo.ID)
 
-	p.addPeer(pinfo.ID, addr) // Add host peer to peer list -- use the given address
-	p.sessionHost = pinfo.ID  // Set this nodes session host to the bootstrapping host it connected to
+	// Set sessionHost
+	p.sessionHost = peerInfo{ID: pinfo.ID, Addr: addr}
 
 	// Get and set peerlist from host
 	p.ExecuteCommand(&GetPeerListCommand{})

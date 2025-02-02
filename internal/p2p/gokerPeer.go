@@ -19,14 +19,12 @@ var protocolID = protocol.ID("/goker/1.0.0")
 
 type GokerPeer struct {
 	// Network logic
-	thisHost          host.Host // This host
+	ThisHost          host.Host // This host
 	ThisHostLBAddress string    // This hosts loopback address (127.0.0.1)
 	ThisHostLNAddress string    // This hosts LAN address
 
-	sessionHost   peer.ID   // Host of the current network (This will change has hosts drop out, but will be used to request specific things)
-	candidateList []peer.ID // Add peer ID's as they connect :: Used for who's hosting next and turn order
-
-	peerList      map[peer.ID]multiaddr.Multiaddr // A map for managing peer connections
+	sessionHost   peerInfo   // Host of the current network (This will change has hosts drop out, but will be used to request specific things)
+	peerList      []peerInfo // A list of peers in this network - Also used as candidate list and turn order (host will be added on game start)
 	peerListMutex sync.Mutex                      // Mutex for accessing peer map
 
 	// Other
@@ -35,6 +33,12 @@ type GokerPeer struct {
 
 	// Network copy of gamestate
 	gameState *gamestate.GameState
+}
+
+// Holds important information about other peers in the network
+type peerInfo struct {
+	ID   peer.ID
+	Addr multiaddr.Multiaddr
 }
 
 func (p *GokerPeer) Init(nickname string, hosting bool, givenAddr string) {
@@ -51,20 +55,19 @@ func (p *GokerPeer) Init(nickname string, hosting bool, givenAddr string) {
 	}
 
 	// Setup this Host
-	p.thisHost = h
-	p.peerList = make(map[peer.ID]multiaddr.Multiaddr)
+	p.ThisHost = h
 
 	// Setup gamestate
 	p.gameState = new(gamestate.GameState)
 	p.gameState.Players = make(map[peer.ID]string)
-	p.gameState.Players[h.ID()] = nickname
-	p.gameState.PlayersMoney = make(map[string]float64)
-	p.gameState.BetHistory = make(map[string]float64)
+	p.gameState.PlayersMoney = make(map[peer.ID]float64)
+	p.gameState.BetHistory = make(map[peer.ID]float64)
+	p.gameState.TurnOrder = make(map[int]peer.ID)
+
+	p.gameState.AddPeerToState(p.ThisHost.ID(), nickname) // Add host to state
 
 	// Listen for incoming connections - Use an anonymous function atm since we don't want to do much
 	h.SetStreamHandler(protocolID, p.handleStream)
-
-	p.peerList[h.ID()] = h.Addrs()[4] // base peerList off of lan IP's till we go international
 
 	// Print the host's ID and multiaddresses
 	p.ThisHostLBAddress = h.Addrs()[0].String() + "/p2p/" + h.ID().String()
@@ -78,19 +81,18 @@ func (p *GokerPeer) Init(nickname string, hosting bool, givenAddr string) {
 
 	if hosting { // Start as a bootstrap server
 		fmt.Println("Running as a host...")
-		p.keyring.GeneratePQ() // Generate first shared p and q
-		p.keyring.GenerateKeys()
-		fmt.Println("Initial keyring ready! awaiting peers.")
+		// Set host at start of peerlist
+		p.peerList = append(p.peerList, peerInfo{ID: p.ThisHost.ID(), Addr: h.Addrs()[4]}) 
 	} else if givenAddr != "" { // Connect to an existing bootstrap server
 		fmt.Println("Joining host...")
 		p.connectToHost(givenAddr)
 	}
 
+	// Start as host listener
+	go p.handleNotifications()
+
 	// Handle State changes forever
 	go p.handleStateChanges()
-
-	// Start as host
-	go p.handleNotifications()
 
 	// To tell the game mananger the network is ready to go
 	channelmanager.FNET_NetActionDoneChan <- struct{}{}
@@ -110,9 +112,19 @@ func (p *GokerPeer) handleStateChanges() {
 				p.gameState.StartingCash = givenAction.State.StartingCash
 
 				// Set starting cash
-				for _, nick := range p.gameState.Players {
-					p.gameState.PlayersMoney[nick] = p.gameState.StartingCash
+				for id := range p.gameState.Players {
+					p.gameState.PlayersMoney[id] = p.gameState.StartingCash
 				}
+
+				var IDs []peer.ID
+				p.peerListMutex.Lock()
+				for _, info := range p.peerList {
+					IDs = append(IDs, info.ID)
+				}
+				p.peerListMutex.Unlock()
+				p.gameState.SetTurnOrder(IDs)
+
+				p.gameState.WhosTurn = 1 // Person left of the dealer
 
 				// For debug when the round starts
 				p.gameState.DumpState()

@@ -10,7 +10,7 @@ var (
 	// Menu
 
 	// Lobby
-	numOfPlayers = widget.NewLabel(fmt.Sprintf("# of players: %d", 0))
+	numOfPlayers = widget.NewLabel(fmt.Sprintf("# of players: %d", 1))
 	loopbackAddress string
 	lanAddress string
 

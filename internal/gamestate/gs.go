@@ -9,18 +9,19 @@ import (
 
 type GameState struct {
 	// Handled as players join
-	Players      map[peer.ID]string // Player nicknames tied to their peer.ID
-	PlayersMoney map[string]float64 // Players money by nickname
-	BetHistory   map[string]float64 // A map to store bets placed by players
+	Players      map[peer.ID]string  // Player nicknames tied to their peer.ID
+	PlayersMoney map[peer.ID]float64 // Players money by peer ID
+	BetHistory   map[peer.ID]float64 // A map to store bets placed on the current round
 
 	// Handled by network (based off of candidate list)
-	WhosTurn     peer.ID
+	TurnOrder map[int]peer.ID
+	WhosTurn  int
 
 	// Set by host and shared in network
 	StartingCash float64
-	Pot          float64            // The current pot amount
-	MinBet       float64            // Minimum bet required for the round (again from table settings)
-	Phase        string             // Current phase of the game (e.g., "preflop", "flop", "turn", "river")
+	Pot          float64 // The current pot amount
+	MinBet       float64 // Minimum bet required for the round (again from table settings)
+	Phase        string  // Current phase of the game (e.g., "preflop", "flop", "turn", "river")
 }
 
 // Refresh state for new possible rounds
@@ -46,25 +47,25 @@ func (gs *GameState) AddPeerToState(peerID peer.ID, nickname string) {
 		return
 	}
 	gs.Players[peerID] = nickname
-	gs.BetHistory[nickname] = 0.0
+	gs.BetHistory[peerID] = 0.0
 }
 
 func (gs *GameState) RemovePeerFromState(peerID peer.ID) {
-	nickname, exists := gs.Players[peerID]
+	_, exists := gs.Players[peerID]
 	if !exists {
 		log.Println("RemovePeerFromState: Peer not in state")
 		return
 	}
 	delete(gs.Players, peerID)
 	// Remove bet history
-	delete(gs.BetHistory, nickname)
+	delete(gs.BetHistory, peerID)
 
-	_, exists = gs.PlayersMoney[nickname]
+	_, exists = gs.PlayersMoney[peerID]
 	if !exists {
 		log.Println("RemovePeerFromState: Peer doesn't have money")
 		return
 	}
-	delete(gs.PlayersMoney, nickname)
+	delete(gs.PlayersMoney, peerID)
 }
 
 func (gs *GameState) GetCurrentPot() float64 {
@@ -75,6 +76,12 @@ func (gs *GameState) GetCurrentPot() float64 {
 	return pot
 }
 
+func (gs *GameState) SetTurnOrder(IDs []peer.ID) {
+	for i, v := range IDs {
+		gs.TurnOrder[i] = v
+	}
+}
+
 func (gs *GameState) DumpState() {
 	fmt.Println("DUMPING STATE")
 	fmt.Println("---------------------------------")
@@ -82,19 +89,33 @@ func (gs *GameState) DumpState() {
 	for id, val := range gs.Players {
 		fmt.Println(id.String() + ", " + val)
 	}
-	fmt.Println("---------")	
+	fmt.Println("---------")
 	log.Print("PlayersMoney: ")
 	for id, val := range gs.PlayersMoney {
 		fmt.Printf("%s, %.1f\n", id, val)
 
 	}
-	fmt.Println("---------")	
+	fmt.Println("---------")
+	log.Print("BetHistory: ")
+	for id, val := range gs.BetHistory {
+		fmt.Printf("%s, %.1f\n", id, val)
+
+	}
+	fmt.Println("---------")
+	log.Print("TurnOrder: ")
+	for i := 0; i < len(gs.TurnOrder); i++ {
+		id, _ := gs.TurnOrder[i]
+		fmt.Printf("%d. %s\n", i, id.String())
+	}
+	fmt.Println("---------")
+	log.Printf("WhosTurn: %d", gs.WhosTurn)
+	fmt.Println("---------")
 	log.Printf("StartingCash: %.1f", gs.StartingCash)
-	fmt.Println("---------")	
+	fmt.Println("---------")
 	log.Printf("Pot: %.1f", gs.Pot)
-	fmt.Println("---------")	
+	fmt.Println("---------")
 	log.Printf("MineBet: %.1f", gs.MinBet)
-	fmt.Println("---------")	
+	fmt.Println("---------")
 	log.Printf("Phase: %s", gs.Phase)
 	fmt.Println("--------------------------------")
 }

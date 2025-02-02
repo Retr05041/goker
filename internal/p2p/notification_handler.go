@@ -17,12 +17,12 @@ import (
 
 // Notification system for host - Handles incoming connections and disconnections
 func (p *GokerPeer) handleNotifications() {
-	p.thisHost.Network().Notify(&network.NotifyBundle{
+	p.ThisHost.Network().Notify(&network.NotifyBundle{
 		ConnectedF: func(n network.Network, conn network.Conn) { // On peer connect
 			fmt.Printf("NOTIFICATION: Connection from new peer: %s\n", conn.RemotePeer()) // WHEN A NEW PEER CONNECTS TO US, IT MUST BE FROM A BROADCAST SERVER SENDING IT
 
 			// Connect to the new peer and update the peer list
-			newPeerID, err := p.handlePeerConnection(conn.RemotePeer(), conn.RemoteMultiaddr())
+			err := p.handlePeerConnection(conn.RemotePeer(), conn.RemoteMultiaddr())
 			if err != nil {
 				log.Println("handlePeerConnection failed: ", err)
 				return 
@@ -33,18 +33,6 @@ func (p *GokerPeer) handleNotifications() {
 
 			// Request Nickname from new peer
 			p.ExecuteCommand(&NicknameRequestCommand{})
-
-			// Validate peerID then add to state
-			if newPeerID == nil {
-				log.Println("newPeerID is nil, skipping AddPeerToState")
-				return
-			}
-			nickname, exists := p.gameState.Players[*newPeerID]
-			if !exists {
-					log.Println("Nickname not found for peer ID: ", newPeerID)
-					return
-			}
-			p.gameState.AddPeerToState(*newPeerID, nickname)
 		},
 		DisconnectedF: func(n network.Network, conn network.Conn) { // On peer disconnect
 			fmt.Printf("NOTIFICATION: Disconnected from peer: %s\n", conn.RemotePeer())
@@ -64,17 +52,12 @@ func (p *GokerPeer) handleNotifications() {
 }
 
 // Connect to new peers that are discovered - Called when the ConnectF NOTIFICATION has been made.
-func (p *GokerPeer) handlePeerConnection(newPeerID peer.ID, newPeerAddr multiaddr.Multiaddr) (*peer.ID, error) { 
+func (p *GokerPeer) handlePeerConnection(newPeerID peer.ID, newPeerAddr multiaddr.Multiaddr) error { 
 	p.peerListMutex.Lock()
 	defer p.peerListMutex.Unlock()
 
-	// Check if already connected
-	if _, exists := p.peerList[newPeerID]; exists {
-		return nil, fmt.Errorf("Already connected to peer: %s\n", newPeerID)
-	}
-
 	// Add new peer to the peer list
-	p.peerList[newPeerID] = newPeerAddr
+	p.peerList = append(p.peerList, peerInfo{ID: newPeerID, Addr: newPeerAddr})
 
 	// Create address info for the new peer
 	addrInfo := peer.AddrInfo{ID: newPeerID, Addrs: []multiaddr.Multiaddr{newPeerAddr}}
@@ -82,11 +65,11 @@ func (p *GokerPeer) handlePeerConnection(newPeerID peer.ID, newPeerAddr multiadd
 	// Attempt to connect to the new peer
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	if err := p.thisHost.Connect(ctx, addrInfo); err != nil {
-		return nil, fmt.Errorf("Failed to connect to new peer %s: %v", newPeerID, err)
+	if err := p.ThisHost.Connect(ctx, addrInfo); err != nil {
+		return fmt.Errorf("Failed to connect to new peer %s: %v", newPeerID, err)
 	}
 	fmt.Printf("Connected to new peer: %s\n", newPeerID)
-	return &newPeerID, nil
+	return nil
 }
 
 // Handle existing peer disconnection - Called when the DisconnectF NOTIFICATION has been made
@@ -94,11 +77,9 @@ func (p *GokerPeer) handlePeerDisconnection(peerID peer.ID) {
 	p.peerListMutex.Lock()
 	defer p.peerListMutex.Unlock()
 
-	// Remove the peer from neccessary maps
-	if _, exists := p.peerList[peerID]; exists {
-		delete(p.peerList, peerID)
-		fmt.Printf("Peer %s disconnected and removed from peer list.\n", peerID)
-	} else {
-		log.Printf("Peer %s not found in peer list.\n", peerID)
+	for i, peerInfo := range p.peerList {
+		if peerInfo.ID == peerID {
+			p.peerList = append(p.peerList[:i], p.peerList[i+1:]...)
+		}
 	}
 }

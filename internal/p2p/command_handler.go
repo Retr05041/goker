@@ -96,7 +96,7 @@ func (p *GokerPeer) handleStream(stream network.Stream) {
 type GetPeerListCommand struct{}
 
 func (gpl *GetPeerListCommand) Execute(peer *GokerPeer) {
-	stream, err := peer.thisHost.NewStream(context.Background(), peer.sessionHost, protocolID)
+	stream, err := peer.ThisHost.NewStream(context.Background(), peer.sessionHost.ID, protocolID)
 	if err != nil {
 		log.Printf("GetPeerListCommand: Failed to create stream to host %s: %v\n", peer.sessionHost, err)
 		return
@@ -134,44 +134,44 @@ func (nr *NicknameRequestCommand) Execute(peer *GokerPeer) {
 	peer.peerListMutex.Lock()
 	defer peer.peerListMutex.Unlock()
 
-	for peerID := range peer.peerList {
-		if peerID == peer.thisHost.ID() {
+	for _, peerInfo := range peer.peerList {
+		if  peerInfo.ID == peer.ThisHost.ID() {
 			continue
 		}
-		if _, exists := peer.gameState.Players[peerID]; exists { // If we already have their nickname don't bother getting it again
+		if _, exists := peer.gameState.Players[peerInfo.ID]; exists { // If we already have their nickname don't bother getting it again
 			continue
 		}
 
 		// Create a new stream to the peer
-		stream, err := peer.thisHost.NewStream(context.Background(), peerID, protocolID)
+		stream, err := peer.ThisHost.NewStream(context.Background(), peerInfo.ID, protocolID)
 		if err != nil {
-			log.Printf("NicknameRequest: Failed to create stream to host %s: %v\n", peerID, err)
+			log.Printf("NicknameRequest: Failed to create stream to host %s: %v\n", peerInfo.ID, err)
 			return
 		}
 		defer stream.Close()
 
 		_, err = stream.Write([]byte("CMDnicknamerequest\n\\END\n"))
 		if err != nil {
-			log.Printf("NicknameRequest: Failed to send command to peer%s: %v\n", peerID, err)
+			log.Printf("NicknameRequest: Failed to send command to peer%s: %v\n", peerInfo.ID, err)
 		} else {
-			fmt.Printf("NicknameRequest: Sent command to peer%s\n", peerID)
+			fmt.Printf("NicknameRequest: Sent command to peer%s\n", peerInfo.ID)
 		}
 
 		// Read the response - we do this as they won't be sending an actual *command* back, just some text
 		responseBytes, err := io.ReadAll(stream)
 		if err != nil {
-			log.Printf("NicknameRequest: Failed to read response from host %s: %v\n", peerID, err)
+			log.Printf("NicknameRequest: Failed to read response from host %s: %v\n", peerInfo.ID, err)
 		} else {
 			peerNickname := strings.Split(string(responseBytes), "\n")
-			fmt.Printf("NicknameRequest: Received response from peer: %s -- Nickname: %s\n", peerID, peerNickname[0])
-			peer.gameState.AddPeerToState(peerID, peerNickname[0]) // Finally add peer to gamestate
+			fmt.Printf("NicknameRequest: Received response from peer: %s -- Nickname: %s\n", peerInfo.ID, peerNickname[0])
+			peer.gameState.AddPeerToState(peerInfo.ID, peerNickname[0]) // Finally add peer to gamestate
 			// TODO: This is where we should send the state BACK to the gamemanager
 		}
 	}
 }
 
 func (nr *NicknameRequestCommand) Respond(peer *GokerPeer, sendingStream network.Stream) {
-	_, err := sendingStream.Write([]byte(peer.gameState.Players[peer.thisHost.ID()]))
+	_, err := sendingStream.Write([]byte(peer.gameState.Players[peer.ThisHost.ID()]))
 	if err != nil {
 		log.Printf("NicknameRequest: Failed to send nickname to peer %s: %v\n", sendingStream.Conn().RemotePeer(), err)
 	} else {
@@ -186,27 +186,27 @@ type PQRequestCommand struct{}
 
 func (pq *PQRequestCommand) Execute(peer *GokerPeer) {
 	// Create a new stream to the peer
-	stream, err := peer.thisHost.NewStream(context.Background(), peer.sessionHost, protocolID)
+	stream, err := peer.ThisHost.NewStream(context.Background(), peer.sessionHost.ID, protocolID)
 	if err != nil {
-		log.Printf("PQRequest: Failed to create stream to host %s: %v\n", peer.sessionHost, err)
+		log.Printf("PQRequest: Failed to create stream to host %s: %v\n", peer.sessionHost.ID, err)
 		return
 	}
 	defer stream.Close()
 
 	_, err = stream.Write([]byte("CMDpqrequest\n\\END\n"))
 	if err != nil {
-		log.Printf("PQRequest: Failed to send command to host %s: %v\n", peer.sessionHost, err)
+		log.Printf("PQRequest: Failed to send command to host %s: %v\n", peer.sessionHost.ID, err)
 	} else {
-		fmt.Printf("PQRequest: Sent command to host %s\n", peer.sessionHost)
+		fmt.Printf("PQRequest: Sent command to host %s\n", peer.sessionHost.ID)
 	}
 
 	// Read the response - we do this as they won't be sending an actual *command* back, just some text
 	responseBytes, err := io.ReadAll(stream)
 	if err != nil {
-		log.Printf("PQRequest: Failed to read response from host %s: %v\n", peer.sessionHost, err)
+		log.Printf("PQRequest: Failed to read response from host %s: %v\n", peer.sessionHost.ID, err)
 	} else {
 		pq := strings.Split(string(responseBytes), "\n")
-		fmt.Printf("PQRequest: Received response from host: %s\n", peer.sessionHost)
+		fmt.Printf("PQRequest: Received response from host: %s\n", peer.sessionHost.ID)
 		peer.keyring.SetPQ(pq[0], pq[1]) // Set this servers p and q
 		peer.keyring.GenerateKeys()
 	}
@@ -236,15 +236,15 @@ func (sp *ProtocolFirstStepCommand) Execute(peer *GokerPeer) {
 	peer.peerListMutex.Lock()
 	defer peer.peerListMutex.Unlock()
 
-	for peerID := range peer.peerList {
-		if peerID == peer.thisHost.ID() {
+	for _, peerInfo := range peer.peerList {
+		if peerInfo.ID == peer.ThisHost.ID() {
 			continue
 		}
 
 		// Create a new stream to the peer
-		stream, err := peer.thisHost.NewStream(context.Background(), peerID, protocolID)
+		stream, err := peer.ThisHost.NewStream(context.Background(), peerInfo.ID, protocolID)
 		if err != nil {
-			log.Printf("ProtocolFirstStep: Failed to create stream to peer %s: %v\n", peerID, err)
+			log.Printf("ProtocolFirstStep: Failed to create stream to peer %s: %v\n", peerInfo.ID, err)
 			continue
 		}
 		defer stream.Close()
@@ -252,9 +252,9 @@ func (sp *ProtocolFirstStepCommand) Execute(peer *GokerPeer) {
 		// Send the deck
 		_, err = stream.Write([]byte(fmt.Sprintf("CMDprotocolFS %s\n\\END\n", peer.deck.GenerateDeckPayload())))
 		if err != nil {
-			log.Printf("ProtocolFirstStep: Failed to send deck to peer %s: %v\n", peerID, err)
+			log.Printf("ProtocolFirstStep: Failed to send deck to peer %s: %v\n", peerInfo.ID, err)
 		} else {
-			fmt.Printf("ProtocolFirstStep: Sent deck to peer %s\n", peerID)
+			fmt.Printf("ProtocolFirstStep: Sent deck to peer %s\n", peerInfo.ID)
 		}
 
 		// Get the response (the new deck)
@@ -263,7 +263,7 @@ func (sp *ProtocolFirstStepCommand) Execute(peer *GokerPeer) {
 			log.Printf("ProtocolFirstStep: Failed to read response from host %s: %v\n", peer.sessionHost, err)
 		} else {
 			peer.deck.SetDeck(string(responseBytes))
-			fmt.Printf("ProtocolFirstStep: Received response from peer %s\n", peerID)
+			fmt.Printf("ProtocolFirstStep: Received response from peer %s\n", peerInfo.ID)
 		}
 
 	}
@@ -295,15 +295,15 @@ func (sp *ProtocolSecondStepCommand) Execute(peer *GokerPeer) {
 	peer.peerListMutex.Lock()
 	defer peer.peerListMutex.Unlock()
 
-	for peerID := range peer.peerList {
-		if peerID == peer.thisHost.ID() {
+	for _, peerInfo := range peer.peerList {
+		if peerInfo.ID == peer.ThisHost.ID() {
 			continue
 		}
 
 		// Create a new stream to the peer
-		stream, err := peer.thisHost.NewStream(context.Background(), peerID, protocolID)
+		stream, err := peer.ThisHost.NewStream(context.Background(), peerInfo.ID, protocolID)
 		if err != nil {
-			log.Printf("ProtocolSecondStep: Failed to create stream to peer %s: %v\n", peerID, err)
+			log.Printf("ProtocolSecondStep: Failed to create stream to peer %s: %v\n", peerInfo.ID, err)
 			continue
 		}
 		defer stream.Close()
@@ -311,9 +311,9 @@ func (sp *ProtocolSecondStepCommand) Execute(peer *GokerPeer) {
 		// Send the deck
 		_, err = stream.Write([]byte(fmt.Sprintf("CMDprotocolSS %s\n\\END\n", peer.deck.GenerateDeckPayload())))
 		if err != nil {
-			log.Printf("ProtocolSecondStep: Failed to send deck to peer %s: %v\n", peerID, err)
+			log.Printf("ProtocolSecondStep: Failed to send deck to peer %s: %v\n", peerInfo.ID, err)
 		} else {
-			fmt.Printf("ProtocolSecondStep: Sent deck to peer %s\n", peerID)
+			fmt.Printf("ProtocolSecondStep: Sent deck to peer %s\n", peerInfo.ID)
 		}
 
 		// Get the response (the new deck)
@@ -322,7 +322,7 @@ func (sp *ProtocolSecondStepCommand) Execute(peer *GokerPeer) {
 			log.Printf("ProtocolSecondStep: Failed to read response from host %s: %v\n", peer.sessionHost, err)
 		} else {
 			peer.deck.SetDeck(string(responseBytes)) // Setting the deck without changing it as no shuffling was done
-			fmt.Printf("ProtocolSecondStep: Received response from peer %s\n", peerID)
+			fmt.Printf("ProtocolSecondStep: Received response from peer %s\n", peerInfo.ID)
 		}
 	}
 }
@@ -348,24 +348,24 @@ func (sg *StartRoundCommand) Execute(peer *GokerPeer) {
 	peer.peerListMutex.Lock()
 	defer peer.peerListMutex.Unlock()
 
-	for peerID := range peer.peerList {
-		if peerID == peer.thisHost.ID() {
+	for _, peerInfo := range peer.peerList {
+		if peerInfo.ID == peer.ThisHost.ID() {
 			continue
 		}
 
 		// Create a new stream to the peer
-		stream, err := peer.thisHost.NewStream(context.Background(), peerID, protocolID)
+		stream, err := peer.ThisHost.NewStream(context.Background(), peerInfo.ID, protocolID)
 		if err != nil {
-			log.Printf("StarRoundCommand: Failed to create stream to peer %s: %v\n", peerID, err)
+			log.Printf("StarRoundCommand: Failed to create stream to peer %s: %v\n", peerInfo.ID, err)
 			continue
 		}
 		defer stream.Close()
 
 		_, err = stream.Write([]byte(fmt.Sprintf("CMDstartround\n\\END\n")))
 		if err != nil {
-			log.Printf("StartRoundCommand: Failed to send command to peer %s: %v\n", peerID, err)
+			log.Printf("StartRoundCommand: Failed to send command to peer %s: %v\n", peerInfo.ID, err)
 		} else {
-			fmt.Printf("StartRoundCommand: Sent command to peer %s\n", peerID)
+			fmt.Printf("StartRoundCommand: Sent command to peer %s\n", peerInfo.ID)
 		}
 	}
 }
