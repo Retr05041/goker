@@ -50,14 +50,23 @@ func (gm *GameManager) listenForActions() {
 				<- channelmanager.FNET_NetActionDoneChan // Wait for network to be done setting up
 				channelmanager.TGUI_AddressChan <- []string{gm.network.ThisHostLBAddress, gm.network.ThisHostLNAddress}
 			case "startRound": // TODO: This action should gather table rules for the state
+				// Refresh state
 				gm.state.FreshState(nil, nil) // Initialise the state for this round (doesn't affect turn order or peers etc.)
-
 				channelmanager.TGUI_MyMoneyChan <- gm.state.StartingCash
 				channelmanager.TGUI_PotChan <- gm.state.Pot
-				channelmanager.TFNET_GameStateChan <- channelmanager.StateChange{Action: "startround", State: *gm.state} // Send the state with the lobby rules to the network for population
-				<- channelmanager.FNET_NetActionDoneChan // Again wait for the network to respond
+
+				// Send state to network so everyone can start the round
+				channelmanager.TNET_GameStateChan <- channelmanager.StateChange{Action: "startround", State: *gm.state} // Send the state with the lobby rules to the network for population
+
+				// Get state back from network
+				newState := <- channelmanager.FNET_GameStateChan
+				gm.state = &newState
+
+				// TODO: Send Player info to GUI before letting the GUI progress to the round screen - Player nicknames and their money
+
+				<- channelmanager.FNET_NetActionDoneChan // Again wait for the network to respond (should be sent once all peers have the state)
 				gm.state.DumpState()
-				// gm.network.ExecuteCommand(&p2p.StartRoundCommand{})
+				channelmanager.TGUI_StartRound <- struct{}{} // Tell GUI to move to the table UI
 			case "Raise":
 				// Handle raise action
 				fmt.Println("Handling Raise action")

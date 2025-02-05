@@ -98,12 +98,11 @@ func (p *GokerPeer) Init(nickname string, hosting bool, givenAddr string) {
 	channelmanager.FNET_NetActionDoneChan <- struct{}{}
 }
 
-// TODO: Implement handleStateChanges
-// Handles state changes on the local side
+// Handle state changes coming from GUI
 func (p *GokerPeer) handleStateChanges() {
 	for {
 		select {
-		case givenAction := <-channelmanager.TFNET_GameStateChan:
+		case givenAction := <-channelmanager.TNET_GameStateChan:
 			switch givenAction.Action {
 			case "startround": // Set: Nickanes -> Peer ID's | Turn Order ->
 				p.gameState.MinBet = givenAction.State.MinBet
@@ -128,9 +127,12 @@ func (p *GokerPeer) handleStateChanges() {
 
 				// For debug when the round starts
 				p.gameState.DumpState()
-				channelmanager.FNET_NetActionDoneChan <- struct{}{} // Done updating state
+				channelmanager.FNET_GameStateChan <- *p.gameState // Send game state back to GUI, just needs to be updated on their end
+
 				// TODO: Send gamestate to everyone
 				// TODO: Run command for everyone to move to the game view
+
+				channelmanager.FNET_NetActionDoneChan <- struct{}{} // Done updating state
 			}
 		}
 	}

@@ -20,6 +20,8 @@ var (
 	handGrid  = container.NewGridWrap(boardSize) // Holds the hand images
 	boardGrid = container.NewGridWrap(boardSize) // Holds the hand images
 
+	playerCards = container.NewVBox()
+
 	moneyLabel = widget.NewLabel(fmt.Sprintf("My Money: $%.0f", 0.0))
 	valueLabel = widget.NewLabel(fmt.Sprintf("$%.0f", 0.0))
 	betSlider  = widget.NewSlider(0, 100)
@@ -30,5 +32,11 @@ func initElements() {
 	betSlider.Step = 1
 	betSlider.OnChanged = func(f float64) {
 		valueLabel.SetText(fmt.Sprintf("$%.0f", f))
+	}
+
+	// For testing
+	for i := 0; i < 3; i++ {
+		card := widget.NewCard("TestPlayer", "$100", nil) // Title: Name, Subtitle: Money
+		playerCards.Add(card)
 	}
 }

@@ -56,6 +56,7 @@ func showMenuUI(givenWindow fyne.Window) {
 func showHostUI(givenWindow fyne.Window) {
 	playButton := widget.NewButton("Play", func() {
 		channelmanager.FGUI_ActionChan <- channelmanager.ActionType{Action: "startRound"}
+		<- channelmanager.TGUI_StartRound
 		showGameScreen(givenWindow)
 	})
 	copyLBAddrButton := widget.NewButton("Copy LB address", func() {
@@ -103,19 +104,23 @@ func showGameScreen(givenWindow fyne.Window) {
 	})
 
 	setWindowContent(givenWindow,
-		container.NewCenter(
-			container.NewVBox(
-				container.NewCenter(potLabel),
-				boardGrid,
-				container.NewCenter(
-					container.NewVBox(
-						container.NewCenter(moneyLabel),
-						container.NewHBox(
-							handGrid,
-							container.NewVBox(
-								foldButton,
-								callButton,
-								container.NewHBox(raiseButton, valueLabel),
-								betSlider),
-							checkButton))))))
+		container.NewBorder(
+			nil, 
+			nil, 
+			playerCards, 
+			container.NewCenter(
+				container.NewVBox(
+					container.NewCenter(potLabel),
+					boardGrid,
+					container.NewCenter(
+						container.NewVBox(
+							container.NewCenter(moneyLabel),
+							container.NewHBox(
+								handGrid,
+								container.NewVBox(
+									foldButton,
+									callButton,
+									container.NewHBox(raiseButton, valueLabel),
+									betSlider),
+								checkButton)))))))
 }

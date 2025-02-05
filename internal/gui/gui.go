@@ -43,6 +43,7 @@ func Init() {
 	mainWindow.ShowAndRun()
 }
 
+// Since we want to keep logic out of the GUI, this will listen for any updates from specific parts of the state
 func gmListener() {
 	for {
 		select {
@@ -58,6 +59,8 @@ func gmListener() {
 			updateNumOfPlayers(players)
 		case address := <- channelmanager.TGUI_AddressChan:
 			updateAddress(address)
+		default:
+			// Do nothing, stops blocking
 		}
 	}
 }
@@ -85,6 +88,7 @@ func updateBoardImages(board []*canvas.Image) {
 }
 
 func updatePot(pot float64) {
+
 	potLabel.SetText(fmt.Sprintf("Pot: %.0f", pot))
 	potLabel.Refresh()
 }
