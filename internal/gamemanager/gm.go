@@ -56,7 +56,8 @@ func (gm *GameManager) listenForActions() {
 				channelmanager.TGUI_PotChan <- gm.state.Pot
 				channelmanager.TFNET_GameStateChan <- channelmanager.StateChange{Action: "startround", State: *gm.state} // Send the state with the lobby rules to the network for population
 				<- channelmanager.FNET_NetActionDoneChan // Again wait for the network to respond
-				gm.network.ExecuteCommand(&p2p.StartRoundCommand{})
+				gm.state.DumpState()
+				// gm.network.ExecuteCommand(&p2p.StartRoundCommand{})
 			case "Raise":
 				// Handle raise action
 				fmt.Println("Handling Raise action")

@@ -10,9 +10,9 @@ import (
 )
 
 func setWindowContent(window fyne.Window, content fyne.CanvasObject) {
-	window.Resize(fyne.NewSize(float32(MAX_WIDTH), float32(MAX_HEIGHT))) // Ensure size consistency
 	if window.Content() != content {
 		window.SetContent(content)
+		window.Resize(fyne.NewSize(float32(MAX_WIDTH), float32(MAX_HEIGHT))) // Ensure size consistency
 	}
 }
 
@@ -107,16 +107,15 @@ func showGameScreen(givenWindow fyne.Window) {
 			container.NewVBox(
 				container.NewCenter(potLabel),
 				boardGrid,
-				container.NewPadded(
-					container.NewCenter(
-						container.NewVBox(
-							container.NewCenter(moneyLabel),
-							container.NewHBox(
-								handGrid,
-								container.NewVBox(
-									foldButton,
-									callButton,
-									container.NewHBox(raiseButton, valueLabel),
-									betSlider),
-								checkButton)))))))
+				container.NewCenter(
+					container.NewVBox(
+						container.NewCenter(moneyLabel),
+						container.NewHBox(
+							handGrid,
+							container.NewVBox(
+								foldButton,
+								callButton,
+								container.NewHBox(raiseButton, valueLabel),
+								betSlider),
+							checkButton))))))
 }

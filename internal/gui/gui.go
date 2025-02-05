@@ -8,12 +8,13 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/canvas"
+	"fyne.io/fyne/v2/container"
 )
 
 var (
 	// GUI Settings
-	MAX_WIDTH  = 600
-	MAX_HEIGHT = 400
+	MAX_WIDTH  = 600 // 600
+	MAX_HEIGHT = 400 //400
 
 	// Colors
 	BLUE = color.NRGBA{R: 0, G: 173, B: 216, A: 255}
@@ -63,19 +64,23 @@ func gmListener() {
 
 func updateHandImages(hand []*canvas.Image) {
 	fmt.Println("Updating Hand Images")
-	handGrid.Objects = nil
+
+	newGrid := container.NewGridWithColumns(2)
 	for _, image := range hand {
-		handGrid.Add(image)
+		newGrid.Add(image)
 	}
+	handGrid = container.NewGridWrap(handSize, newGrid)
 	handGrid.Refresh()
 }
 
 func updateBoardImages(board []*canvas.Image) {
 	fmt.Println("Updating Board Images")
-	boardGrid.Objects = nil
+
+	newGrid := container.NewGridWithColumns(5)
 	for _, image := range board {
-		boardGrid.Add(image)
+		newGrid.Add(image)
 	}
+	boardGrid= container.NewGridWrap(boardSize, newGrid)
 	boardGrid.Refresh()
 }
 

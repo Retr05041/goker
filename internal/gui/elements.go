@@ -2,21 +2,23 @@ package gui
 
 import (
 	"fmt"
+
+	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/widget"
 )
 
 var (
-	// Menu
-
 	// Lobby
 	numOfPlayers = widget.NewLabel(fmt.Sprintf("# of players: %d", 1))
 	loopbackAddress string
 	lanAddress string
 
 	// Game
-	handGrid  = container.NewGridWithColumns(2) // Holds the hand images
-	boardGrid = container.NewGridWithColumns(5) // Holds the board iamges
+	boardSize = fyne.NewSize((234*5)/2, 333/2) // 234x333 per card
+	handSize = fyne.NewSize((234*2)/2, 333/2) // 234x333
+	handGrid  = container.NewGridWrap(boardSize) // Holds the hand images
+	boardGrid = container.NewGridWrap(boardSize) // Holds the hand images
 
 	moneyLabel = widget.NewLabel(fmt.Sprintf("My Money: $%.0f", 0.0))
 	valueLabel = widget.NewLabel(fmt.Sprintf("$%.0f", 0.0))

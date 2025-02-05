@@ -128,6 +128,7 @@ func (p *GokerPeer) handleStateChanges() {
 
 				// For debug when the round starts
 				p.gameState.DumpState()
+				channelmanager.FNET_NetActionDoneChan <- struct{}{} // Done updating state
 				// TODO: Send gamestate to everyone
 				// TODO: Run command for everyone to move to the game view
 			}
