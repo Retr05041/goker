@@ -34,9 +34,4 @@ func initElements() {
 		valueLabel.SetText(fmt.Sprintf("$%.0f", f))
 	}
 
-	// For testing
-	for i := 0; i < 3; i++ {
-		card := widget.NewCard("TestPlayer", "$100", nil) // Title: Name, Subtitle: Money
-		playerCards.Add(card)
-	}
 }

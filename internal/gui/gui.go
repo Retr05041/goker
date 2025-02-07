@@ -9,6 +9,7 @@ import (
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/widget"
 )
 
 var (
@@ -53,12 +54,12 @@ func gmListener() {
 			updateBoardImages(board)
 		case pot := <-channelmanager.TGUI_PotChan:
 			updatePot(pot)
-		case money := <-channelmanager.TGUI_MyMoneyChan:
-			updateMyMoney(money)
-		case players := <-channelmanager.FNET_NumOfPlayersChan: // Gets it straight from the network
-			updateNumOfPlayers(players)
+		case numOfPlayers := <-channelmanager.FNET_NumOfPlayersChan: // Gets it straight from the network - This is updated when new players join the lobby
+			updateNumOfPlayers(numOfPlayers)
 		case address := <- channelmanager.TGUI_AddressChan:
 			updateAddress(address)
+		case playerInfo := <- channelmanager.TGUI_PlayerInfo:
+			updateCards(playerInfo)
 		default:
 			// Do nothing, stops blocking
 		}
@@ -93,7 +94,7 @@ func updatePot(pot float64) {
 	potLabel.Refresh()
 }
 
-func updateMyMoney(money float64) {
+func updateStartingMoney(money float64) {
 	moneyLabel.SetText(fmt.Sprintf("My Money: %.0f", money))
 	moneyLabel.Refresh()
 }
@@ -106,4 +107,15 @@ func updateNumOfPlayers(players int) {
 func updateAddress(addresses []string) {
 	loopbackAddress = addresses[0]
 	lanAddress = addresses[1]
+}
+
+func updateCards(playerInfo channelmanager.PlayerInfo) {
+	playerCards.Objects = nil
+
+	for playerIndex, playerNickname := range playerInfo.Players {
+		newCard := 	widget.NewCard(playerNickname, fmt.Sprintf("$%.0f", playerInfo.Money[playerIndex]), nil)
+		playerCards.Add(newCard)
+	}
+	
+	playerCards.Refresh()
 }

@@ -8,10 +8,11 @@ import (
 	"goker/internal/p2p"
 
 	"fyne.io/fyne/v2/canvas"
+	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 type GameManager struct {
-	state   *gamestate.GameState
+	state   *gamestate.GameState // State built by the host and network
 	network *p2p.GokerPeer
 
 	MyNickname string
@@ -35,49 +36,53 @@ func (gm *GameManager) listenForActions() {
 		select {
 		case givenAction := <-channelmanager.FGUI_ActionChan:
 			switch givenAction.Action {
-			case "Init":
+			case "Init": // Initialise everything
 				gm.initHand()
 				gm.initBoard()
 				gm.state = new(gamestate.GameState)
-			case "hostOrConnectPressed":
+			case "hostOrConnectPressed": // Weather you are hosting or connecting this is called
+				// Setup network node
 				gm.network = new(p2p.GokerPeer)
 
+				// Setup gamestate
+				gm.state = new(gamestate.GameState)
+				gm.state.Players = make(map[peer.ID]string)
+				gm.state.PlayersMoney = make(map[peer.ID]float64)
+				gm.state.BetHistory = make(map[peer.ID]float64)
+				gm.state.TurnOrder = make(map[int]peer.ID)
+
 				if len(givenAction.DataS) == 1 {
-					go gm.network.Init(givenAction.DataS[0], true, "")
+					go gm.network.Init(givenAction.DataS[0], true, "", gm.state) // Hosting
 				} else {
-					go gm.network.Init(givenAction.DataS[0], false, givenAction.DataS[1])
+					go gm.network.Init(givenAction.DataS[0], false, givenAction.DataS[1], gm.state) // Connecting
 				}
 				<- channelmanager.FNET_NetActionDoneChan // Wait for network to be done setting up
-				channelmanager.TGUI_AddressChan <- []string{gm.network.ThisHostLBAddress, gm.network.ThisHostLNAddress}
+				channelmanager.TGUI_AddressChan <- []string{gm.network.ThisHostLBAddress, gm.network.ThisHostLNAddress} // Tell the GUI the addresses we need
 			case "startRound": // TODO: This action should gather table rules for the state
-				// Refresh state
+				// Refresh state 
 				gm.state.FreshState(nil, nil) // Initialise the state for this round (doesn't affect turn order or peers etc.)
-				channelmanager.TGUI_MyMoneyChan <- gm.state.StartingCash
-				channelmanager.TGUI_PotChan <- gm.state.Pot
 
-				// Send state to network so everyone can start the round
-				channelmanager.TNET_GameStateChan <- channelmanager.StateChange{Action: "startround", State: *gm.state} // Send the state with the lobby rules to the network for population
-
-				// Get state back from network
-				newState := <- channelmanager.FNET_GameStateChan
-				gm.state = &newState
+				channelmanager.TNET_ActionChan <- channelmanager.ActionType{Action: "startround"} // Tell network to populate the state with everyone connected
 
 				// TODO: Send Player info to GUI before letting the GUI progress to the round screen - Player nicknames and their money
 
-				<- channelmanager.FNET_NetActionDoneChan // Again wait for the network to respond (should be sent once all peers have the state)
-				gm.state.DumpState()
+				<- channelmanager.FNET_NetActionDoneChan // wait for network to be finished with the startround command
+
+				// Fill the GUI with populated state
+				channelmanager.TGUI_PlayerInfo <- gm.state.GetPlayerInfo()
+
 				channelmanager.TGUI_StartRound <- struct{}{} // Tell GUI to move to the table UI
 			case "Raise":
 				// Handle raise action
 				fmt.Println("Handling Raise action")
-				// Update state
-				gm.state.PlayersMoney[gm.network.ThisHost.ID()] -= givenAction.DataF
-				gm.state.Pot += givenAction.DataF
-				gm.state.BetHistory[gm.network.ThisHost.ID()] = givenAction.DataF // Update state
 
-				// Update GUI
-				channelmanager.TGUI_MyMoneyChan <- gm.state.PlayersMoney[gm.network.ThisHost.ID()]
-				channelmanager.TGUI_PotChan <- gm.state.Pot
+				// Update state locally
+				gm.state.PlayersMoney[gm.network.ThisHost.ID()] -= givenAction.DataF
+				gm.state.BetHistory[gm.network.ThisHost.ID()] += givenAction.DataF 
+
+				// Update GUI locally
+				channelmanager.TGUI_PotChan <- gm.state.GetCurrentPot()
+				channelmanager.TGUI_PlayerInfo <- gm.state.GetPlayerInfo()
 
 				// Send newly updated state to the network for processing
 				//channelmanager.TFNET_GameStateChan <- gm.state 

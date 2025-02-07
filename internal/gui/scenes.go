@@ -113,14 +113,12 @@ func showGameScreen(givenWindow fyne.Window) {
 					container.NewCenter(potLabel),
 					boardGrid,
 					container.NewCenter(
-						container.NewVBox(
-							container.NewCenter(moneyLabel),
-							container.NewHBox(
-								handGrid,
-								container.NewVBox(
-									foldButton,
-									callButton,
-									container.NewHBox(raiseButton, valueLabel),
-									betSlider),
-								checkButton)))))))
+						container.NewHBox(
+							handGrid,
+							container.NewVBox(
+								foldButton,
+								callButton,
+								container.NewHBox(raiseButton, valueLabel),
+								betSlider),
+							checkButton))))))
 }

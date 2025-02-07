@@ -91,7 +91,7 @@ func (p *GokerPeer) handleStream(stream network.Stream) {
 }
 
 
-/////////////////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////// NEGOTIATION ///////////////////////////////////////////////////
 
 type GetPeerListCommand struct{}
 
@@ -125,9 +125,6 @@ func (gpl *GetPeerListCommand) Respond(peer *GokerPeer, sendingStream network.St
 	}
 }
 
-
-/////////////////////////////////////////////////////////////////////////////////////////////////////
-
 type NicknameRequestCommand struct{} // Loops through every peer in the peer list, and for any we don't have nicknames for, request one
 
 func (nr *NicknameRequestCommand) Execute(peer *GokerPeer) {
@@ -135,10 +132,10 @@ func (nr *NicknameRequestCommand) Execute(peer *GokerPeer) {
 	defer peer.peerListMutex.Unlock()
 
 	for _, peerInfo := range peer.peerList {
-		if  peerInfo.ID == peer.ThisHost.ID() {
+		if  peerInfo.ID == peer.ThisHost.ID() { // If it's us
 			continue
 		}
-		if _, exists := peer.gameState.Players[peerInfo.ID]; exists { // If we already have their nickname don't bother getting it again
+		if peer.gameState.PlayerExists(peerInfo.ID) { // if the player already exists, then obviously we don't need their nickname
 			continue
 		}
 
@@ -171,7 +168,8 @@ func (nr *NicknameRequestCommand) Execute(peer *GokerPeer) {
 }
 
 func (nr *NicknameRequestCommand) Respond(peer *GokerPeer, sendingStream network.Stream) {
-	_, err := sendingStream.Write([]byte(peer.gameState.Players[peer.ThisHost.ID()]))
+	myNickname := peer.gameState.GetNickname(peer.ThisHost.ID())
+	_, err := sendingStream.Write([]byte(myNickname))
 	if err != nil {
 		log.Printf("NicknameRequest: Failed to send nickname to peer %s: %v\n", sendingStream.Conn().RemotePeer(), err)
 	} else {
@@ -179,7 +177,7 @@ func (nr *NicknameRequestCommand) Respond(peer *GokerPeer, sendingStream network
 	}
 }
 
-/////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////// KEYRING //////////////////////////////////////////////////////
 
 // Request the shared P and Q every peer should have in the network - all peers will request this from the host each round
 type PQRequestCommand struct{}
@@ -223,9 +221,8 @@ func (pq *PQRequestCommand) Respond(peer *GokerPeer, sendingStream network.Strea
 	}
 }
 
-/////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////// PROTOCOL ///////////////////////////////////////////////////
 
-// / ### PROTOCOL ###
 type ProtocolFirstStepCommand struct{}
 
 // Send deck to every peer, allow them to shuffle and encrypt the deck
@@ -340,7 +337,7 @@ func (sp *ProtocolSecondStepCommand) Respond(peer *GokerPeer, sendingStream netw
 	}
 }
 
-/////////////////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////// ROUND COMMANDS /////////////////////////////////////////////////////
 
 type StartRoundCommand struct{}
 
@@ -374,8 +371,10 @@ func (sg *StartRoundCommand) Respond(peer *GokerPeer, sendingStream network.Stre
 	channelmanager.FNET_StartRoundChan <- true
 }
 
-/////////////////////////////////////////////////////////////////////////////////////////////////////
 
+// TODO: Implement these.
 type RaiseCommand struct{}
+type CheckCommand struct{}
+type CallCommand struct{}
+type FoldCommand struct{}
 
-// TODO: Implement this.

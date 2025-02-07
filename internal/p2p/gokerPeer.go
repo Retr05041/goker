@@ -25,13 +25,13 @@ type GokerPeer struct {
 
 	sessionHost   peerInfo   // Host of the current network (This will change has hosts drop out, but will be used to request specific things)
 	peerList      []peerInfo // A list of peers in this network - Also used as candidate list and turn order (host will be added on game start)
-	peerListMutex sync.Mutex                      // Mutex for accessing peer map
+	peerListMutex sync.Mutex // Mutex for accessing peer map
 
 	// Other
 	deck    *deckInfo    // Holds all deck logic (cards, deck operations etc.)
 	keyring *sra.Keyring // Holds all encryption logic
 
-	// Network copy of gamestate
+	// state given by the game manager
 	gameState *gamestate.GameState
 }
 
@@ -41,7 +41,7 @@ type peerInfo struct {
 	Addr multiaddr.Multiaddr
 }
 
-func (p *GokerPeer) Init(nickname string, hosting bool, givenAddr string) {
+func (p *GokerPeer) Init(nickname string, hosting bool, givenAddr string, givenState *gamestate.GameState) {
 	// TODO: Move these to later on when using the keyring is necessary
 	p.keyring = new(sra.Keyring)
 	p.deck = new(deckInfo)
@@ -57,16 +57,13 @@ func (p *GokerPeer) Init(nickname string, hosting bool, givenAddr string) {
 	// Setup this Host
 	p.ThisHost = h
 
-	// Setup gamestate
-	p.gameState = new(gamestate.GameState)
-	p.gameState.Players = make(map[peer.ID]string)
-	p.gameState.PlayersMoney = make(map[peer.ID]float64)
-	p.gameState.BetHistory = make(map[peer.ID]float64)
-	p.gameState.TurnOrder = make(map[int]peer.ID)
+	// Set the givenState
+	p.gameState = givenState
 
-	p.gameState.AddPeerToState(p.ThisHost.ID(), nickname) // Add host to state
+	// Add host to state
+	p.gameState.AddPeerToState(p.ThisHost.ID(), nickname)
 
-	// Listen for incoming connections - Use an anonymous function atm since we don't want to do much
+	// Set stream handler for this peer
 	h.SetStreamHandler(protocolID, p.handleStream)
 
 	// Print the host's ID and multiaddresses
@@ -82,7 +79,7 @@ func (p *GokerPeer) Init(nickname string, hosting bool, givenAddr string) {
 	if hosting { // Start as a bootstrap server
 		fmt.Println("Running as a host...")
 		// Set host at start of peerlist
-		p.peerList = append(p.peerList, peerInfo{ID: p.ThisHost.ID(), Addr: h.Addrs()[4]}) 
+		p.peerList = append(p.peerList, peerInfo{ID: p.ThisHost.ID(), Addr: h.Addrs()[4]})
 	} else if givenAddr != "" { // Connect to an existing bootstrap server
 		fmt.Println("Joining host...")
 		p.connectToHost(givenAddr)
@@ -102,19 +99,16 @@ func (p *GokerPeer) Init(nickname string, hosting bool, givenAddr string) {
 func (p *GokerPeer) handleStateChanges() {
 	for {
 		select {
-		case givenAction := <-channelmanager.TNET_GameStateChan:
+		case givenAction := <-channelmanager.TNET_ActionChan:
 			switch givenAction.Action {
-			case "startround": // Set: Nickanes -> Peer ID's | Turn Order ->
-				p.gameState.MinBet = givenAction.State.MinBet
-				p.gameState.Pot = givenAction.State.Pot
-				p.gameState.Phase = givenAction.State.Phase
-				p.gameState.StartingCash = givenAction.State.StartingCash
+			case "startround": // Populate the state given from the game manager with player info
 
 				// Set starting cash
 				for id := range p.gameState.Players {
 					p.gameState.PlayersMoney[id] = p.gameState.StartingCash
 				}
 
+				// Set Turn Order
 				var IDs []peer.ID
 				p.peerListMutex.Lock()
 				for _, info := range p.peerList {
@@ -123,14 +117,7 @@ func (p *GokerPeer) handleStateChanges() {
 				p.peerListMutex.Unlock()
 				p.gameState.SetTurnOrder(IDs)
 
-				p.gameState.WhosTurn = 1 // Person left of the dealer
-
-				// For debug when the round starts
-				p.gameState.DumpState()
-				channelmanager.FNET_GameStateChan <- *p.gameState // Send game state back to GUI, just needs to be updated on their end
-
-				// TODO: Send gamestate to everyone
-				// TODO: Run command for everyone to move to the game view
+				p.gameState.WhosTurn = 0 // Start with the dealer for debug
 
 				channelmanager.FNET_NetActionDoneChan <- struct{}{} // Done updating state
 			}
