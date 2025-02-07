@@ -84,7 +84,11 @@ func (p *GokerPeer) handleStream(stream network.Stream) {
 		p.RespondToCommand(&ProtocolFirstStepCommand{}, stream)
 	case "CMDstartround":
 		fmt.Println("Recieved start round command")
-		p.gameState.SetTableRules(payload)
+		// Populate the state with peoples info
+		p.SetTurnOrderWithLobby()
+		// Set the rest of the state
+		p.gameState.FreshStateFromPayload(payload)
+		channelmanager.TGUI_PlayerInfo <- p.gameState.GetPlayerInfo() // Update GUI cards
 		p.RespondToCommand(&StartRoundCommand{}, stream)
 	default:
 		log.Printf("Unknown Command Recieved: %s\n", command)

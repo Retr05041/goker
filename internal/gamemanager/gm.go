@@ -22,10 +22,13 @@ type GameManager struct {
 
 func (gm *GameManager) StartGame() {
 	// Init channels
+	fmt.Println("Initing Channels")
 	channelmanager.Init()
 
+	fmt.Println("Listening for Actions")
 	go gm.listenForActions()
 
+	fmt.Println("Running GUI")
 	gui.Init()
 }
 
@@ -59,14 +62,9 @@ func (gm *GameManager) listenForActions() {
 				<- channelmanager.FNET_NetActionDoneChan // Wait for network to be done setting up
 				channelmanager.TGUI_AddressChan <- []string{gm.network.ThisHostLBAddress, gm.network.ThisHostLNAddress} // Tell the GUI the addresses we need
 			case "startRound": // TODO: This action should gather table rules for the state
-				// Refresh state 
-				gm.state.FreshState(nil, nil) // Initialise the state for this round (doesn't affect turn order or peers etc.)
+				gm.network.SetTurnOrderWithLobby() 
 
-				channelmanager.TNET_ActionChan <- channelmanager.ActionType{Action: "startround"} // Tell network to populate the state with everyone connected
-
-				// TODO: Send Player info to GUI before letting the GUI progress to the round screen - Player nicknames and their money
-
-				<- channelmanager.FNET_NetActionDoneChan // wait for network to be finished with the startround command
+				gm.state.FreshState(nil, nil) // Initialize table after the lobby is populated
 
 				// Fill the GUI with populated state
 				channelmanager.TGUI_PlayerInfo <- gm.state.GetPlayerInfo()

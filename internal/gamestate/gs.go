@@ -41,6 +41,9 @@ func (gs *GameState) FreshState(startingCash *float64, minBet *float64) {
 	if startingCash != nil {
 		gs.StartingCash = *startingCash
 	}
+	for id := range gs.Players {
+		gs.PlayersMoney[id] = gs.StartingCash
+	}
 
 	gs.MinBet = 1.0
 	if minBet != nil {
@@ -48,13 +51,11 @@ func (gs *GameState) FreshState(startingCash *float64, minBet *float64) {
 	}
 
 	gs.Phase = "preflop"
+	gs.WhosTurn = 0 // Start with the dealer for debug
 }
 
 // Function used by network for setting table rules from host
-func (gs *GameState) SetTableRules(payload string) {
-	gs.mu.Lock()
-	defer gs.mu.Unlock()
-
+func (gs *GameState) FreshStateFromPayload(payload string) {
 	payloadSplit := strings.Split(payload, "\n")
 
 	startingCash, err := strconv.ParseFloat(payloadSplit[0], 64) // Parse as a 64 bit float
@@ -66,8 +67,7 @@ func (gs *GameState) SetTableRules(payload string) {
 		log.Println(err)
 	}
 
-	gs.StartingCash = startingCash
-	gs.MinBet = minBet
+	gs.FreshState(&startingCash, &minBet)
 }
 
 // For adding a new peer to the state

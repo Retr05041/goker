@@ -88,39 +88,17 @@ func (p *GokerPeer) Init(nickname string, hosting bool, givenAddr string, givenS
 	// Start as host listener
 	go p.handleNotifications()
 
-	// Handle State changes forever
-	go p.handleStateChanges()
-
 	// To tell the game mananger the network is ready to go
 	channelmanager.FNET_NetActionDoneChan <- struct{}{}
 }
 
-// Handle state changes coming from GUI
-func (p *GokerPeer) handleStateChanges() {
-	for {
-		select {
-		case givenAction := <-channelmanager.TNET_ActionChan:
-			switch givenAction.Action {
-			case "startround": // Populate the state given from the game manager with player info
-
-				// Set starting cash
-				for id := range p.gameState.Players {
-					p.gameState.PlayersMoney[id] = p.gameState.StartingCash
-				}
-
-				// Set Turn Order
-				var IDs []peer.ID
-				p.peerListMutex.Lock()
-				for _, info := range p.peerList {
-					IDs = append(IDs, info.ID)
-				}
-				p.peerListMutex.Unlock()
-				p.gameState.SetTurnOrder(IDs)
-
-				p.gameState.WhosTurn = 0 // Start with the dealer for debug
-
-				channelmanager.FNET_NetActionDoneChan <- struct{}{} // Done updating state
-			}
-		}
+func (p *GokerPeer) SetTurnOrderWithLobby() {
+	// Set Turn Order
+	var IDs []peer.ID
+	p.peerListMutex.Lock()
+	for _, info := range p.peerList {
+		IDs = append(IDs, info.ID)
 	}
+	p.peerListMutex.Unlock()
+	p.gameState.SetTurnOrder(IDs)
 }
