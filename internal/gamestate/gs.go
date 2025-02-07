@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"goker/internal/channelmanager"
 	"log"
+	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -24,11 +26,9 @@ type GameState struct {
 
 	// Handled by host
 	StartingCash float64 // Starting cash for all players
-	Pot          float64 // The current pot amount
 	MinBet       float64 // Minimum bet required for the round (again from table settings)
 	Phase        string  // Current phase of the game (e.g., "preflop", "flop", "turn", "river")
 }
-
 
 // Refresh state for new possible rounds
 func (gs *GameState) FreshState(startingCash *float64, minBet *float64) {
@@ -36,7 +36,6 @@ func (gs *GameState) FreshState(startingCash *float64, minBet *float64) {
 	defer gs.mu.Unlock()
 
 	gs.Phase = "preflop"
-	gs.Pot = 0.0
 
 	gs.StartingCash = 100.0
 	if startingCash != nil {
@@ -47,6 +46,28 @@ func (gs *GameState) FreshState(startingCash *float64, minBet *float64) {
 	if minBet != nil {
 		gs.MinBet = *minBet
 	}
+
+	gs.Phase = "preflop"
+}
+
+// Function used by network for setting table rules from host
+func (gs *GameState) SetTableRules(payload string) {
+	gs.mu.Lock()
+	defer gs.mu.Unlock()
+
+	payloadSplit := strings.Split(payload, "\n")
+
+	startingCash, err := strconv.ParseFloat(payloadSplit[0], 64) // Parse as a 64 bit float
+	if err != nil {
+		log.Println(err)
+	}
+	minBet, err := strconv.ParseFloat(payloadSplit[1], 64)
+	if err != nil {
+		log.Println(err)
+	}
+
+	gs.StartingCash = startingCash
+	gs.MinBet = minBet
 }
 
 // For adding a new peer to the state
@@ -142,6 +163,18 @@ func (gs *GameState) GetPlayerInfo() channelmanager.PlayerInfo {
 	return channelmanager.PlayerInfo{Players: players, Money: money}
 }
 
+// Package up the table rules to be sent to others
+func (gs *GameState) GetTableRules() string {
+	gs.mu.Lock()
+	defer gs.mu.Unlock()
+
+	var tableRules string
+	tableRules += fmt.Sprintf("%.0f\n", gs.StartingCash)
+	tableRules += fmt.Sprintf("%.0f\n", gs.MinBet)
+
+	return tableRules
+}
+
 func (gs *GameState) DumpState() {
 	fmt.Println("DUMPING STATE")
 	fmt.Println("---------------------------------")
@@ -172,7 +205,7 @@ func (gs *GameState) DumpState() {
 	fmt.Println("---------")
 	log.Printf("StartingCash: %.1f", gs.StartingCash)
 	fmt.Println("---------")
-	log.Printf("Pot: %.1f", gs.Pot)
+	log.Printf("Pot: %.1f", gs.GetCurrentPot())
 	fmt.Println("---------")
 	log.Printf("MineBet: %.1f", gs.MinBet)
 	fmt.Println("---------")

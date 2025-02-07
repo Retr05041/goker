@@ -68,6 +68,9 @@ func (p *GokerPeer) handleStream(stream network.Stream) {
 	case "CMDgetpeers": // Send peerlist to just this stream
 		fmt.Println("Recieved peer list request")
 		p.RespondToCommand(&GetPeerListCommand{}, stream)
+	case "CMDnicknamerequest":
+		log.Println("Recieved nickname request command")
+		p.RespondToCommand(&NicknameRequestCommand{}, stream)
 	case "CMDpqrequest":
 		fmt.Println("Recieved PQ Request")
 		p.RespondToCommand(&PQRequestCommand{}, stream)
@@ -81,12 +84,10 @@ func (p *GokerPeer) handleStream(stream network.Stream) {
 		p.RespondToCommand(&ProtocolFirstStepCommand{}, stream)
 	case "CMDstartround":
 		fmt.Println("Recieved start round command")
+		p.gameState.SetTableRules(payload)
 		p.RespondToCommand(&StartRoundCommand{}, stream)
-	case "CMDnicknamerequest":
-		log.Println("Recieved nickname request command")
-		p.RespondToCommand(&NicknameRequestCommand{}, stream)
 	default:
-		log.Printf("Unknown Response Recieved: %s\n", cleanedMessage)
+		log.Printf("Unknown Command Recieved: %s\n", command)
 	}
 }
 
@@ -358,7 +359,8 @@ func (sg *StartRoundCommand) Execute(peer *GokerPeer) {
 		}
 		defer stream.Close()
 
-		_, err = stream.Write([]byte(fmt.Sprintf("CMDstartround\n\\END\n")))
+		// Send table rules and the start command
+		_, err = stream.Write([]byte(fmt.Sprintf("CMDstartround %s\n\\END\n", peer.gameState.GetTableRules())))
 		if err != nil {
 			log.Printf("StartRoundCommand: Failed to send command to peer %s: %v\n", peerInfo.ID, err)
 		} else {
@@ -368,6 +370,7 @@ func (sg *StartRoundCommand) Execute(peer *GokerPeer) {
 }
 
 func (sg *StartRoundCommand) Respond(peer *GokerPeer, sendingStream network.Stream) {
+	peer.gameState.DumpState()
 	channelmanager.FNET_StartRoundChan <- true
 }
 

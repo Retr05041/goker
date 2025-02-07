@@ -71,6 +71,9 @@ func (gm *GameManager) listenForActions() {
 				// Fill the GUI with populated state
 				channelmanager.TGUI_PlayerInfo <- gm.state.GetPlayerInfo()
 
+				gm.network.ExecuteCommand(&p2p.StartRoundCommand{}) // Update others the round is starting
+				
+				gm.state.DumpState()
 				channelmanager.TGUI_StartRound <- struct{}{} // Tell GUI to move to the table UI
 			case "Raise":
 				// Handle raise action
