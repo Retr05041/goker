@@ -62,16 +62,28 @@ func (gm *GameManager) listenForActions() {
 				<- channelmanager.FNET_NetActionDoneChan // Wait for network to be done setting up
 				channelmanager.TGUI_AddressChan <- []string{gm.network.ThisHostLBAddress, gm.network.ThisHostLNAddress} // Tell the GUI the addresses we need
 			case "startRound": // TODO: This action should gather table rules for the state
-				gm.network.SetTurnOrderWithLobby() 
+				gm.network.SetTurnOrderWithLobby() // Sets the turn order 
 
-				gm.state.FreshState(nil, nil) // Initialize table after the lobby is populated
+				gm.state.FreshState(nil, nil) // Initialize table settings after the lobby is populated
 
 				// Fill the GUI with populated state
 				channelmanager.TGUI_PlayerInfo <- gm.state.GetPlayerInfo()
 
-				gm.network.ExecuteCommand(&p2p.StartRoundCommand{}) // Update others the round is starting
-				
-				gm.state.DumpState()
+				// Setup keyring for this round
+				gm.network.Keyring.GeneratePQ()
+				gm.network.Keyring.GenerateKeys()
+
+				gm.network.ExecuteCommand(&p2p.SendPQCommand{}) // Send everyone the generated P and Q so they can setup their Keyring
+				gm.network.ExecuteCommand(&p2p.ProtocolFirstStepCommand{}) // Setting up deck pt.1
+				gm.network.ExecuteCommand(&p2p.ProtocolSecondStepCommand{}) // Setting up deck pt.2
+
+				gm.network.Deck.DisplayDeck()
+
+				//gm.network.ExecuteCommand(&p2p.DealHandCommand{}) // Hands are dealt
+				//gm.network.ExecuteCommand(&p2p.KeyExchangeCommand{}) // Everyone sends each others timelocked payload to each other and they all begin to crack it
+				gm.network.ExecuteCommand(&p2p.StartRoundCommand{}) // Tells others to move to the game screen
+
+				//gm.state.DumpState()
 				channelmanager.TGUI_StartRound <- struct{}{} // Tell GUI to move to the table UI
 			case "Raise":
 				// Handle raise action

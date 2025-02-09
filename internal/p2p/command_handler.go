@@ -71,18 +71,20 @@ func (p *GokerPeer) handleStream(stream network.Stream) {
 	case "CMDnicknamerequest":
 		log.Println("Recieved nickname request command")
 		p.RespondToCommand(&NicknameRequestCommand{}, stream)
-	case "CMDpqrequest":
-		fmt.Println("Recieved PQ Request")
-		p.RespondToCommand(&PQRequestCommand{}, stream)
+	case "CMDsendpq":
+		fmt.Println("Recieved Send P & Q command")
+		pq := strings.Split(payload, "\n")
+		p.Keyring.SetPQ(pq[0], pq[1]) // Set P and Q
+		p.Keyring.GenerateKeys() // Create Keys
 	case "CMDprotocolFS": // First step of Protocol
 		fmt.Println("Recieved protocols first step command")
-		p.deck.SetDeck(payload)
+		p.Deck.SetDeck(payload)
 		p.RespondToCommand(&ProtocolFirstStepCommand{}, stream)
 	case "CMDprotocolSS": // Second step of Protocol
 		fmt.Println("Recieved protocols second step command")
-		p.deck.SetDeck(payload)
+		p.Deck.SetDeck(payload)
 		p.RespondToCommand(&ProtocolFirstStepCommand{}, stream)
-	case "CMDstartround":
+	case "CMDstartround": // TODO: might have to split this up to send the lobby rules and actually get everyone to the game screen
 		fmt.Println("Recieved start round command")
 		// Populate the state with peoples info
 		p.SetTurnOrderWithLobby()
@@ -167,7 +169,6 @@ func (nr *NicknameRequestCommand) Execute(peer *GokerPeer) {
 			peerNickname := strings.Split(string(responseBytes), "\n")
 			fmt.Printf("NicknameRequest: Received response from peer: %s -- Nickname: %s\n", peerInfo.ID, peerNickname[0])
 			peer.gameState.AddPeerToState(peerInfo.ID, peerNickname[0]) // Finally add peer to gamestate
-			// TODO: This is where we should send the state BACK to the gamemanager
 		}
 	}
 }
@@ -184,46 +185,38 @@ func (nr *NicknameRequestCommand) Respond(peer *GokerPeer, sendingStream network
 
 ////////////////////////////////////////// KEYRING //////////////////////////////////////////////////////
 
-// Request the shared P and Q every peer should have in the network - all peers will request this from the host each round
-type PQRequestCommand struct{}
+// Send P and Q to all peers in the network so they may generate their GenerateKeys
+// TODO: Have all peers validate P and Q's bit length and that they are prime then sign and send to next
+type SendPQCommand struct{}
 
-func (pq *PQRequestCommand) Execute(peer *GokerPeer) {
-	// Create a new stream to the peer
-	stream, err := peer.ThisHost.NewStream(context.Background(), peer.sessionHost.ID, protocolID)
-	if err != nil {
-		log.Printf("PQRequest: Failed to create stream to host %s: %v\n", peer.sessionHost.ID, err)
-		return
-	}
-	defer stream.Close()
+func (pq *SendPQCommand) Execute(peer *GokerPeer) {
+	peer.peerListMutex.Lock()
+	defer peer.peerListMutex.Unlock()
 
-	_, err = stream.Write([]byte("CMDpqrequest\n\\END\n"))
-	if err != nil {
-		log.Printf("PQRequest: Failed to send command to host %s: %v\n", peer.sessionHost.ID, err)
-	} else {
-		fmt.Printf("PQRequest: Sent command to host %s\n", peer.sessionHost.ID)
-	}
+	for _, peerInfo := range peer.peerList {
+		if  peerInfo.ID == peer.ThisHost.ID() { 
+			continue
+		}
+		// Create a new stream to the peer
+		stream, err := peer.ThisHost.NewStream(context.Background(), peerInfo.ID, protocolID)
+		if err != nil {
+			log.Printf("SendPQCommand: Failed to create stream to peer %s: %v\n", peerInfo.ID, err)
+			return
+		}
+		defer stream.Close()
 
-	// Read the response - we do this as they won't be sending an actual *command* back, just some text
-	responseBytes, err := io.ReadAll(stream)
-	if err != nil {
-		log.Printf("PQRequest: Failed to read response from host %s: %v\n", peer.sessionHost.ID, err)
-	} else {
-		pq := strings.Split(string(responseBytes), "\n")
-		fmt.Printf("PQRequest: Received response from host: %s\n", peer.sessionHost.ID)
-		peer.keyring.SetPQ(pq[0], pq[1]) // Set this servers p and q
-		peer.keyring.GenerateKeys()
+		PQData := peer.Keyring.GetPQString()
+		_, err = stream.Write([]byte(fmt.Sprintf("CMDsendpq %s\n\\END\n", PQData)))
+		if err != nil {
+			log.Printf("SendPQCommand: Failed to send command to host %s: %v\n", peerInfo.ID, err)
+		} else {
+			fmt.Printf("SendPQCommand: Sent command to peer %s\n", peerInfo.ID)
+		}
 	}
 }
 
-// Called on a 'CMDpqrequest' command call
-func (pq *PQRequestCommand) Respond(peer *GokerPeer, sendingStream network.Stream) {
-	PQData := peer.keyring.GetPQString()
-	_, err := sendingStream.Write([]byte(PQData))
-	if err != nil {
-		log.Printf("PQRequestResponse: Failed to send PQ to peer %s: %v\n", sendingStream.Conn().RemotePeer(), err)
-	} else {
-		fmt.Printf("PQRequestResponse: Sent PQ to peer %s\n", sendingStream.Conn().RemotePeer())
-	}
+func (pq *SendPQCommand) Respond(peer *GokerPeer, sendingStream network.Stream) {
+	return 
 }
 
 ///////////////////////////////////////////// PROTOCOL ///////////////////////////////////////////////////
@@ -233,7 +226,7 @@ type ProtocolFirstStepCommand struct{}
 // Send deck to every peer, allow them to shuffle and encrypt the deck
 func (sp *ProtocolFirstStepCommand) Execute(peer *GokerPeer) {
 	peer.EncryptAllWithGlobalKeys()
-	peer.deck.ShuffleRoundDeck()
+	peer.Deck.ShuffleRoundDeck()
 
 	peer.peerListMutex.Lock()
 	defer peer.peerListMutex.Unlock()
@@ -252,7 +245,7 @@ func (sp *ProtocolFirstStepCommand) Execute(peer *GokerPeer) {
 		defer stream.Close()
 
 		// Send the deck
-		_, err = stream.Write([]byte(fmt.Sprintf("CMDprotocolFS %s\n\\END\n", peer.deck.GenerateDeckPayload())))
+		_, err = stream.Write([]byte(fmt.Sprintf("CMDprotocolFS %s\n\\END\n", peer.Deck.GenerateDeckPayload())))
 		if err != nil {
 			log.Printf("ProtocolFirstStep: Failed to send deck to peer %s: %v\n", peerInfo.ID, err)
 		} else {
@@ -264,7 +257,7 @@ func (sp *ProtocolFirstStepCommand) Execute(peer *GokerPeer) {
 		if err != nil {
 			log.Printf("ProtocolFirstStep: Failed to read response from host %s: %v\n", peer.sessionHost, err)
 		} else {
-			peer.deck.SetDeck(string(responseBytes))
+			peer.Deck.SetDeck(string(responseBytes))
 			fmt.Printf("ProtocolFirstStep: Received response from peer %s\n", peerInfo.ID)
 		}
 
@@ -275,8 +268,8 @@ func (sp *ProtocolFirstStepCommand) Execute(peer *GokerPeer) {
 func (sp *ProtocolFirstStepCommand) Respond(peer *GokerPeer, sendingStream network.Stream) {
 	// Encrypt the deck with your global keys, shuffle it, then create a new payload to send back
 	peer.EncryptAllWithGlobalKeys()
-	peer.deck.ShuffleRoundDeck()
-	processedDeck := peer.deck.GenerateDeckPayload()
+	peer.Deck.ShuffleRoundDeck()
+	processedDeck := peer.Deck.GenerateDeckPayload()
 
 	// Send the updated deck back to the sender
 	_, err := sendingStream.Write([]byte(fmt.Sprintf("%s\\END\n", processedDeck)))
@@ -311,7 +304,7 @@ func (sp *ProtocolSecondStepCommand) Execute(peer *GokerPeer) {
 		defer stream.Close()
 
 		// Send the deck
-		_, err = stream.Write([]byte(fmt.Sprintf("CMDprotocolSS %s\n\\END\n", peer.deck.GenerateDeckPayload())))
+		_, err = stream.Write([]byte(fmt.Sprintf("CMDprotocolSS %s\n\\END\n", peer.Deck.GenerateDeckPayload())))
 		if err != nil {
 			log.Printf("ProtocolSecondStep: Failed to send deck to peer %s: %v\n", peerInfo.ID, err)
 		} else {
@@ -323,7 +316,7 @@ func (sp *ProtocolSecondStepCommand) Execute(peer *GokerPeer) {
 		if err != nil {
 			log.Printf("ProtocolSecondStep: Failed to read response from host %s: %v\n", peer.sessionHost, err)
 		} else {
-			peer.deck.SetDeck(string(responseBytes)) // Setting the deck without changing it as no shuffling was done
+			peer.Deck.SetDeck(string(responseBytes)) // Setting the deck without changing it as no shuffling was done
 			fmt.Printf("ProtocolSecondStep: Received response from peer %s\n", peerInfo.ID)
 		}
 	}
@@ -333,7 +326,7 @@ func (sp *ProtocolSecondStepCommand) Execute(peer *GokerPeer) {
 func (sp *ProtocolSecondStepCommand) Respond(peer *GokerPeer, sendingStream network.Stream) {
 	peer.DecryptAllWithGlobalKeys()
 	peer.EncryptAllWithVariation()
-	processedDeck := peer.deck.GenerateDeckPayload()
+	processedDeck := peer.Deck.GenerateDeckPayload()
 
 	// Send the updated deck back to the sender
 	_, err := sendingStream.Write([]byte(fmt.Sprintf("%s\\END\n", processedDeck)))
@@ -374,7 +367,8 @@ func (sg *StartRoundCommand) Execute(peer *GokerPeer) {
 }
 
 func (sg *StartRoundCommand) Respond(peer *GokerPeer, sendingStream network.Stream) {
-	peer.gameState.DumpState()
+	peer.Deck.DisplayDeck()
+	//peer.gameState.DumpState()
 	channelmanager.FNET_StartRoundChan <- true
 }
 

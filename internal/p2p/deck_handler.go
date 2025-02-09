@@ -1,13 +1,15 @@
 package p2p
 
 import (
-	"log"
 	"crypto/hmac"
 	"crypto/sha256"
 	"fmt"
+	"log"
 	"math/big"
-	"strings"
 	"math/rand"
+	"strings"
+
+	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 // Holds the current game info (updated per round)
@@ -19,6 +21,12 @@ type deckInfo struct {
 
 	// Secret for hashing cards - Needs to be shared
 	deckHashSecret *big.Int
+}
+
+// Holds a peers hand info
+type HandInfo struct {
+	Peer peer.ID
+	Hand []CardInfo	
 }
 
 // Holds individual card info
@@ -133,26 +141,26 @@ func (g *deckInfo) SetDeck(payload string) {
 
 // Decrypt deck with global keys
 func (p *GokerPeer) DecryptAllWithGlobalKeys() {
-	for _, card := range p.deck.RoundDeck {
-		card.Cardvalue = p.keyring.DecryptWithGlobalKeys(card.Cardvalue)
+	for _, card := range p.Deck.RoundDeck {
+		card.Cardvalue = p.Keyring.DecryptWithGlobalKeys(card.Cardvalue)
 	}
 }
 
 // Encrypt deck with global keys
 func (p *GokerPeer) EncryptAllWithGlobalKeys() {
-	for _, card := range p.deck.RoundDeck {
-		card.Cardvalue = p.keyring.EncryptWithGlobalKeys(card.Cardvalue)
+	for _, card := range p.Deck.RoundDeck {
+		card.Cardvalue = p.Keyring.EncryptWithGlobalKeys(card.Cardvalue)
 	}
 }
 
 // Encrypt deck with variation numbers
 func (p *GokerPeer) EncryptAllWithVariation() {
-	for i, card := range p.deck.RoundDeck {
-		encryptedCard, err := p.keyring.EncryptWithVariation(card.Cardvalue, i)
+	for i, card := range p.Deck.RoundDeck {
+		encryptedCard, err := p.Keyring.EncryptWithVariation(card.Cardvalue, i)
 		if err != nil {
 			log.Println(err)
 		}
-		p.deck.RoundDeck[i].Cardvalue = encryptedCard
-		p.deck.RoundDeck[i].VariationIndex = i
+		p.Deck.RoundDeck[i].Cardvalue = encryptedCard
+		p.Deck.RoundDeck[i].VariationIndex = i
 	}
 }

@@ -28,8 +28,9 @@ type GokerPeer struct {
 	peerListMutex sync.Mutex // Mutex for accessing peer map
 
 	// Other
-	deck    *deckInfo    // Holds all deck logic (cards, deck operations etc.)
-	keyring *sra.Keyring // Holds all encryption logic
+	Deck    *deckInfo    // Holds all deck logic (cards, deck operations etc.)
+	Hands   []HandInfo   // Holds all players hands
+	Keyring *sra.Keyring // Holds all encryption logic
 
 	// state given by the game manager
 	gameState *gamestate.GameState
@@ -42,27 +43,24 @@ type peerInfo struct {
 }
 
 func (p *GokerPeer) Init(nickname string, hosting bool, givenAddr string, givenState *gamestate.GameState) {
-	// TODO: Move these to later on when using the keyring is necessary
-	p.keyring = new(sra.Keyring)
-	p.deck = new(deckInfo)
-	p.deck.GenerateRefDeck("mysupersecretkey")
-	p.deck.GenerateRoundDeck("mysupersecretkey")
+	// Setup deck and keyring for later
+	p.Keyring = new(sra.Keyring)
+	p.Deck = new(deckInfo)
+	p.Deck.GenerateRefDeck("gokerdeck")
+	p.Deck.GenerateRoundDeck("gokerdeck")
+
+	// Set the givenState
+	p.gameState = givenState
 
 	// Create a new libp2p Host
 	h, err := libp2p.New()
 	if err != nil {
 		log.Fatalf("failed to create host: %v", err)
 	}
-
 	// Setup this Host
 	p.ThisHost = h
-
-	// Set the givenState
-	p.gameState = givenState
-
 	// Add host to state
 	p.gameState.AddPeerToState(p.ThisHost.ID(), nickname)
-
 	// Set stream handler for this peer
 	h.SetStreamHandler(protocolID, p.handleStream)
 
