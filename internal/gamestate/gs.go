@@ -16,13 +16,13 @@ type GameState struct {
 	mu sync.Mutex
 	// Handled by network (built dynamically and 'should be' signed by all peers for validity)
 	// On peer connection
-	Players      map[peer.ID]string  // Player nicknames tied to their peer.ID
-	BetHistory   map[peer.ID]float64 // A map to store bets placed on the current round
+	Players    map[peer.ID]string  // Player nicknames tied to their peer.ID
+	BetHistory map[peer.ID]float64 // A map to store bets placed on the current round
 
 	// On play being pressed
 	PlayersMoney map[peer.ID]float64 // Players money by peer ID
-	TurnOrder map[int]peer.ID // Handled by network (based off of candidate list)
-	WhosTurn  int
+	TurnOrder    map[int]peer.ID     // Handled by network (based off of candidate list)
+	WhosTurn     int
 
 	// Handled by host
 	StartingCash float64 // Starting cash for all players
@@ -51,7 +51,7 @@ func (gs *GameState) FreshState(startingCash *float64, minBet *float64) {
 	}
 
 	gs.Phase = "preflop"
-	gs.WhosTurn = 0 // Start with the dealer for debug
+	gs.WhosTurn = 1 // left of the dealer, aka the host for the first round
 }
 
 // Function used by network for setting table rules from host
@@ -116,14 +116,22 @@ func (gs *GameState) GetCurrentPot() float64 {
 	return pot
 }
 
-// Sets turn order - in order of given IDs
+// Sets turn order Whoever is first in the incoming slice is put in the last place, assuming they are the dealer for this round
 func (gs *GameState) SetTurnOrder(IDs []peer.ID) {
 	gs.mu.Lock()
 	defer gs.mu.Unlock()
 
-	for i, v := range IDs {
-		gs.TurnOrder[i] = v
+	if len(IDs) == 0 {
+		return
 	}
+
+	hostID := IDs[0]
+
+	for i := 1; i < len(IDs); i++ {
+		gs.TurnOrder[i-1] = IDs[i]
+	}
+
+	gs.TurnOrder[len(IDs)-1] = hostID
 }
 
 // Check if a player exists
@@ -131,7 +139,7 @@ func (gs *GameState) PlayerExists(id peer.ID) bool {
 	gs.mu.Lock()
 	defer gs.mu.Unlock()
 
-	if _, exists := gs.Players[id]; exists { 
+	if _, exists := gs.Players[id]; exists {
 		return true
 	}
 	return false
@@ -153,7 +161,7 @@ func (gs *GameState) GetPlayerInfo() channelmanager.PlayerInfo {
 	var players []string
 	var money []float64
 	for i := 0; i < len(gs.TurnOrder); i++ { // We disregard any 'exists' stuff as by this point we have already locked in everyone
-		peerID, _ := gs.TurnOrder[i]	
+		peerID, _ := gs.TurnOrder[i]
 		peerNickname, _ := gs.Players[peerID]
 		peerMoney, _ := gs.PlayersMoney[peerID]
 		players = append(players, peerNickname)
@@ -173,6 +181,38 @@ func (gs *GameState) GetTableRules() string {
 	tableRules += fmt.Sprintf("%.0f\n", gs.MinBet)
 
 	return tableRules
+}
+
+func (gs *GameState) GetTurnOrderIndex(peer peer.ID) *int {
+	gs.mu.Lock()
+	defer gs.mu.Unlock()
+
+	for i, v := range gs.TurnOrder {
+		if v == peer {
+			return &i
+		}
+	}
+	return nil
+}
+
+func (gs *GameState) GetNumberOfPlayers() int {
+	gs.mu.Lock()
+	defer gs.mu.Unlock()
+
+	return len(gs.Players)
+}
+
+// Returns all ID's in turn order order
+func (gs *GameState) GetTurnOrder() []peer.ID {
+	gs.mu.Lock()
+	defer gs.mu.Unlock()
+
+	var ids []peer.ID
+	for _, v := range gs.TurnOrder {
+		ids = append(ids, v)
+	}
+
+	return ids
 }
 
 func (gs *GameState) DumpState() {

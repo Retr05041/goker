@@ -18,15 +18,12 @@ type deckInfo struct {
 	ReferenceDeck map[string]*big.Int
 	// Holds hash's that will be encrypted and shuffled per round
 	RoundDeck []CardInfo
-
-	// Secret for hashing cards - Needs to be shared
-	deckHashSecret *big.Int
 }
 
 // Holds a peers hand info
 type HandInfo struct {
 	Peer peer.ID
-	Hand []CardInfo	
+	Hand []CardInfo
 }
 
 // Holds individual card info
@@ -53,18 +50,16 @@ func VerifyCardHash(card string, secretKey string, hash *big.Int) bool {
 	return expectedHash.Cmp(hash) == 0
 }
 
-
-
-func (g *deckInfo) DisplayDeck() {
-	for i, v := range g.RoundDeck {
+func (d *deckInfo) DisplayDeck() {
+	for i, v := range d.RoundDeck {
 		fmt.Print(i)
 		fmt.Print(" - ")
 		fmt.Println(v.Cardvalue.String())
 	}
 }
 
-// Creates new reference deck 
-func (g *deckInfo) GenerateRefDeck(key string) {
+// Creates new reference deck
+func (d *deckInfo) GenerateRefDeck(key string) {
 	newRefDeck := make(map[string]*big.Int, 52)
 
 	count := 0
@@ -77,11 +72,11 @@ func (g *deckInfo) GenerateRefDeck(key string) {
 			count++
 		}
 	}
-	g.ReferenceDeck = newRefDeck
+	d.ReferenceDeck = newRefDeck
 }
 
 // Generate the round deck, which will just be all the hash's from the reference deck
-func (g *deckInfo) GenerateRoundDeck(key string) {
+func (d *deckInfo) GenerateRoundDeck(key string) {
 	newDeck := make([]CardInfo, 0, 52)
 
 	index := 0
@@ -93,32 +88,41 @@ func (g *deckInfo) GenerateRoundDeck(key string) {
 			index++
 		}
 	}
-	g.RoundDeck = newDeck
+	d.RoundDeck = newDeck
 }
 
 // Shuffle the round deck
-func (g *deckInfo) ShuffleRoundDeck() {
-	rand.Shuffle(len(g.RoundDeck), func(i, j int) {
-		g.RoundDeck[i], g.RoundDeck[j] = g.RoundDeck[j], g.RoundDeck[i]
+func (d *deckInfo) ShuffleRoundDeck() {
+	rand.Shuffle(len(d.RoundDeck), func(i, j int) {
+		d.RoundDeck[i], d.RoundDeck[j] = d.RoundDeck[j], d.RoundDeck[i]
 	})
 }
 
-func (g *deckInfo) GetCardFromRefDeck(cardHash *big.Int) (key string, ok bool) {
-  for k, v := range g.ReferenceDeck {
-    if v.Cmp(cardHash) == 0 { 
-      return k, true
-    }
-  }
-  return "", false
+func (d *deckInfo) GetCardFromRefDeck(cardHash *big.Int) (key string, ok bool) {
+	for k, v := range d.ReferenceDeck {
+		if v.Cmp(cardHash) == 0 {
+			return k, true
+		}
+	}
+	return "", false
+}
+
+func (d *deckInfo) GetCardFromRoundDeck(cardIndex int) *CardInfo {
+	for i, v := range d.RoundDeck {
+		if i == cardIndex {
+			return &v
+		}
+	}
+	return nil
 }
 
 // Creates a payload to be sent to anther peer
-func (g *deckInfo) GenerateDeckPayload() string {
+func (d *deckInfo) GenerateDeckPayload() string {
 	// Start with global public and private keys
 	payload := ""
 
 	// Append each variation's `r` value
-	for _, card := range g.RoundDeck {
+	for _, card := range d.RoundDeck {
 		payload += fmt.Sprintf("%s\n", card.Cardvalue.String())
 	}
 
@@ -126,7 +130,7 @@ func (g *deckInfo) GenerateDeckPayload() string {
 }
 
 // Set the round deck given a payload from another peer in the network
-func (g *deckInfo) SetDeck(payload string) {
+func (d *deckInfo) SetDeck(payload string) {
 	var newDeck []CardInfo
 	for i, line := range strings.Split(payload, "\n") {
 		if line == "" || line == "\\END" {
@@ -135,9 +139,8 @@ func (g *deckInfo) SetDeck(payload string) {
 		card, _ := new(big.Int).SetString(line, 10)
 		newDeck = append(newDeck, CardInfo{index: i, Cardvalue: card})
 	}
-	g.RoundDeck = newDeck
+	d.RoundDeck = newDeck
 }
-
 
 // Decrypt deck with global keys
 func (p *GokerPeer) DecryptAllWithGlobalKeys() {
@@ -164,3 +167,53 @@ func (p *GokerPeer) EncryptAllWithVariation() {
 		p.Deck.RoundDeck[i].VariationIndex = i
 	}
 }
+
+// Gets the key payload for a players specific cards
+func (p *GokerPeer) GetKeyPayloadForPlayersHand(peerID peer.ID) string {
+	payload := ""
+
+	for _, handInfo := range p.Hands {
+		if handInfo.Peer == peerID {
+			if len(handInfo.Hand) < 2 {
+				log.Println("error: Hand has less than 2 cards for peer")
+				continue
+			}
+
+			cardOneKey := p.Keyring.GetKeyForCard(handInfo.Hand[0].VariationIndex)
+			cardTwoKey := p.Keyring.GetKeyForCard(handInfo.Hand[1].VariationIndex)
+
+			if cardOneKey == nil || cardTwoKey == nil {
+				log.Println("error: Could not retrieve key for one or both cards")
+				continue
+			}
+
+			payload += fmt.Sprintf("%s\n%s\n", cardOneKey.String(), cardTwoKey.String())
+			break
+		}
+	}
+
+	if payload == "" {
+		log.Println("warning: No matching hand found for peer")
+	}
+
+	return payload
+}
+
+// Creates the hands array, Should be done once the second step of the protocol is done
+func (p *GokerPeer) SetHands() {
+	IDs := p.gameState.GetTurnOrder()
+
+	p.Hands = make([]HandInfo, 0, len(IDs))
+
+	for i, id := range IDs {
+		cardOne := p.Deck.GetCardFromRoundDeck(i)
+		cardTwo := p.Deck.GetCardFromRoundDeck(len(IDs) + i)
+		p.Hands = append(p.Hands, HandInfo{
+			Peer: id,
+			Hand: []CardInfo{*cardOne, *cardTwo},
+		})
+	}
+}
+
+// Decrypts my hand in the hands array given to key strings
+func (p *GokerPeer) DecryptMyHand(cardOneKey string, cardTwoKey string) {}

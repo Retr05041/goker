@@ -53,9 +53,13 @@ func (k *Keyring) DecryptWithVariation(data *big.Int, index int) (*big.Int, erro
 	return new(big.Int).Exp(data, k.keyVariations[index].privateKey, k.globalN), nil
 }
 
+func (k *Keyring) GetKeyForCard(variationIndex int) *big.Int {
+	return k.keyVariations[variationIndex].privateKey
+}
+
 func (k *Keyring) GenerateKeyringPayload() error {
 	if k.globalPublicKey == nil || k.globalPrivateKey == nil || k.keyVariations == nil {
-		return fmt.Errorf("Error: Missing keys or variations")
+		return fmt.Errorf("error: Missing keys or variations")
 	}
 
 	// Start with global public and private keys
@@ -70,47 +74,4 @@ func (k *Keyring) GenerateKeyringPayload() error {
 
 	k.KeyringPayload = payload
 	return nil
-}
-
-func TestVariations() {
-	k := &Keyring{}
-	k.GeneratePQ()
-	k.GenerateKeys()
-
-	// Generate 52 variations
-	err := k.GenerateKeyVariations(52)
-	if err != nil {
-		fmt.Println("Error generating key variations:", err)
-	}
-
-	// Encrypt with variation 0
-	message := HashMessage("Hello, World!")
-	cipherText, _ := k.EncryptWithVariation(message, 0)
-
-	// Decrypt with variation 0
-	plainText, _ := k.DecryptWithVariation(cipherText, 0)
-
-	// Verify
-	fmt.Println("Original:", message)
-	fmt.Println("Decrypted:", plainText)
-}
-
-func TestGenerateKeyringPayload() {
-	k := &Keyring{}
-	k.GeneratePQ()
-	k.GenerateKeys()
-
-	// Generate key variations
-	err := k.GenerateKeyVariations(5)
-	if err != nil {
-		fmt.Println("Error generating key variations:", err)
-		return
-	}
-
-	// Generate payload
-	k.GenerateKeyringPayload()
-
-	// Print the payload
-	fmt.Println("Keyring Payload:")
-	fmt.Println(k.KeyringPayload)
 }

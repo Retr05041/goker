@@ -25,7 +25,7 @@ func (p *GokerPeer) handleNotifications() {
 			err := p.handlePeerConnection(conn.RemotePeer(), conn.RemoteMultiaddr())
 			if err != nil {
 				log.Println("handlePeerConnection failed: ", err)
-				return 
+				return
 			}
 
 			// Update GUI
@@ -52,7 +52,7 @@ func (p *GokerPeer) handleNotifications() {
 }
 
 // Connect to new peers that are discovered - Called when the ConnectF NOTIFICATION has been made.
-func (p *GokerPeer) handlePeerConnection(newPeerID peer.ID, newPeerAddr multiaddr.Multiaddr) error { 
+func (p *GokerPeer) handlePeerConnection(newPeerID peer.ID, newPeerAddr multiaddr.Multiaddr) error {
 	p.peerListMutex.Lock()
 	defer p.peerListMutex.Unlock()
 
@@ -66,7 +66,7 @@ func (p *GokerPeer) handlePeerConnection(newPeerID peer.ID, newPeerAddr multiadd
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := p.ThisHost.Connect(ctx, addrInfo); err != nil {
-		return fmt.Errorf("Failed to connect to new peer %s: %v", newPeerID, err)
+		return fmt.Errorf("failed to connect to new peer %s: %v", newPeerID, err)
 	}
 	fmt.Printf("Connected to new peer: %s\n", newPeerID)
 	return nil

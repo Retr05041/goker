@@ -56,19 +56,15 @@ func gmListener() {
 			updatePot(pot)
 		case numOfPlayers := <-channelmanager.FNET_NumOfPlayersChan: // Gets it straight from the network - This is updated when new players join the lobby
 			updateNumOfPlayers(numOfPlayers)
-		case address := <- channelmanager.TGUI_AddressChan:
+		case address := <-channelmanager.TGUI_AddressChan:
 			updateAddress(address)
-		case playerInfo := <- channelmanager.TGUI_PlayerInfo:
+		case playerInfo := <-channelmanager.TGUI_PlayerInfo:
 			updateCards(playerInfo)
-		default:
-			// Do nothing, stops blocking
 		}
 	}
 }
 
 func updateHandImages(hand []*canvas.Image) {
-	fmt.Println("Updating Hand Images")
-
 	newGrid := container.NewGridWithColumns(2)
 	for _, image := range hand {
 		newGrid.Add(image)
@@ -78,13 +74,11 @@ func updateHandImages(hand []*canvas.Image) {
 }
 
 func updateBoardImages(board []*canvas.Image) {
-	fmt.Println("Updating Board Images")
-
 	newGrid := container.NewGridWithColumns(5)
 	for _, image := range board {
 		newGrid.Add(image)
 	}
-	boardGrid= container.NewGridWrap(boardSize, newGrid)
+	boardGrid = container.NewGridWrap(boardSize, newGrid)
 	boardGrid.Refresh()
 }
 
@@ -92,11 +86,6 @@ func updatePot(pot float64) {
 
 	potLabel.SetText(fmt.Sprintf("Pot: %.0f", pot))
 	potLabel.Refresh()
-}
-
-func updateStartingMoney(money float64) {
-	moneyLabel.SetText(fmt.Sprintf("My Money: %.0f", money))
-	moneyLabel.Refresh()
 }
 
 func updateNumOfPlayers(players int) {
@@ -113,9 +102,9 @@ func updateCards(playerInfo channelmanager.PlayerInfo) {
 	playerCards.Objects = nil
 
 	for playerIndex, playerNickname := range playerInfo.Players {
-		newCard := 	widget.NewCard(playerNickname, fmt.Sprintf("$%.0f", playerInfo.Money[playerIndex]), nil)
+		newCard := widget.NewCard(playerNickname, fmt.Sprintf("$%.0f", playerInfo.Money[playerIndex]), nil)
 		playerCards.Add(newCard)
 	}
-	
+
 	playerCards.Refresh()
 }

@@ -16,22 +16,18 @@ type GameManager struct {
 	network *p2p.GokerPeer
 
 	MyNickname string
-	MyHand []*canvas.Image // Cards for the current player (images for the GUI to render)
-	Board  []*canvas.Image // Community cards on the board (images for the gui to render)
+	MyHand     []*canvas.Image // Cards for the current player (images for the GUI to render)
+	Board      []*canvas.Image // Community cards on the board (images for the gui to render)
 }
 
 func (gm *GameManager) StartGame() {
 	// Init channels
-	fmt.Println("Initing Channels")
 	channelmanager.Init()
 
-	fmt.Println("Listening for Actions")
 	go gm.listenForActions()
 
-	fmt.Println("Running GUI")
 	gui.Init()
 }
-
 
 // Listen for actions from the GUI (like button presses)
 func (gm *GameManager) listenForActions() {
@@ -59,29 +55,30 @@ func (gm *GameManager) listenForActions() {
 				} else {
 					go gm.network.Init(givenAction.DataS[0], false, givenAction.DataS[1], gm.state) // Connecting
 				}
-				<- channelmanager.FNET_NetActionDoneChan // Wait for network to be done setting up
+				<-channelmanager.FNET_NetActionDoneChan                                                                 // Wait for network to be done setting up
 				channelmanager.TGUI_AddressChan <- []string{gm.network.ThisHostLBAddress, gm.network.ThisHostLNAddress} // Tell the GUI the addresses we need
 			case "startRound": // TODO: This action should gather table rules for the state
-				gm.network.SetTurnOrderWithLobby() // Sets the turn order 
+				gm.network.SetTurnOrderWithLobby()                 // Sets the turn order
+				gm.state.FreshState(nil, nil)                      // Initialize table settings after the lobby is populated
+				gm.network.ExecuteCommand(&p2p.InitTableCommand{}) // Tells others table rules and solidify the state
 
-				gm.state.FreshState(nil, nil) // Initialize table settings after the lobby is populated
-
-				// Fill the GUI with populated state
+				// Fill cards in GUI
 				channelmanager.TGUI_PlayerInfo <- gm.state.GetPlayerInfo()
 
 				// Setup keyring for this round
 				gm.network.Keyring.GeneratePQ()
 				gm.network.Keyring.GenerateKeys()
 
-				gm.network.ExecuteCommand(&p2p.SendPQCommand{}) // Send everyone the generated P and Q so they can setup their Keyring
-				gm.network.ExecuteCommand(&p2p.ProtocolFirstStepCommand{}) // Setting up deck pt.1
-				gm.network.ExecuteCommand(&p2p.ProtocolSecondStepCommand{}) // Setting up deck pt.2
+				// Setup deck
+				gm.network.ExecuteCommand(&p2p.SendPQCommand{})             // Send everyone the generated P and Q so they can setup their Keyring
+				gm.network.ExecuteCommand(&p2p.ProtocolFirstStepCommand{})  // Setting up deck pt.1
+				gm.network.ExecuteCommand(&p2p.ProtocolSecondStepCommand{}) // Setting up deck pt.2 & Sets everyones hands
 
-				gm.network.Deck.DisplayDeck()
+				// Setup hands
+				gm.network.SetHands()
+				gm.network.ExecuteCommand(&p2p.RequestHandCommand{}) // Get the keys for YOUR hand
 
-				//gm.network.ExecuteCommand(&p2p.DealHandCommand{}) // Hands are dealt
 				//gm.network.ExecuteCommand(&p2p.KeyExchangeCommand{}) // Everyone sends each others timelocked payload to each other and they all begin to crack it
-				gm.network.ExecuteCommand(&p2p.StartRoundCommand{}) // Tells others to move to the game screen
 
 				//gm.state.DumpState()
 				channelmanager.TGUI_StartRound <- struct{}{} // Tell GUI to move to the table UI
@@ -91,14 +88,14 @@ func (gm *GameManager) listenForActions() {
 
 				// Update state locally
 				gm.state.PlayersMoney[gm.network.ThisHost.ID()] -= givenAction.DataF
-				gm.state.BetHistory[gm.network.ThisHost.ID()] += givenAction.DataF 
+				gm.state.BetHistory[gm.network.ThisHost.ID()] += givenAction.DataF
 
 				// Update GUI locally
 				channelmanager.TGUI_PotChan <- gm.state.GetCurrentPot()
 				channelmanager.TGUI_PlayerInfo <- gm.state.GetPlayerInfo()
 
 				// Send newly updated state to the network for processing
-				//channelmanager.TFNET_GameStateChan <- gm.state 
+				//channelmanager.TFNET_GameStateChan <- gm.state
 				//gm.network.ExecuteCommand(&p2p.RaiseCommand{}) // Update peers about raise
 			case "Fold":
 				// Handle fold action

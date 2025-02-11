@@ -31,7 +31,6 @@ func (p *GokerPeer) RespondToCommand(command Command, stream network.Stream) {
 // Handle incoming streams (should be commands only)
 func (p *GokerPeer) handleStream(stream network.Stream) {
 	defer stream.Close()
-	fmt.Println("New stream detected... getting command.")
 
 	// Read incoming command
 	var message strings.Builder
@@ -71,32 +70,42 @@ func (p *GokerPeer) handleStream(stream network.Stream) {
 	case "CMDnicknamerequest":
 		log.Println("Recieved nickname request command")
 		p.RespondToCommand(&NicknameRequestCommand{}, stream)
-	case "CMDsendpq":
-		fmt.Println("Recieved Send P & Q command")
+	case "CMDsendpq": // No need to build a response for this
+		log.Println("Recieved Send P & Q command")
 		pq := strings.Split(payload, "\n")
 		p.Keyring.SetPQ(pq[0], pq[1]) // Set P and Q
-		p.Keyring.GenerateKeys() // Create Keys
+		p.Keyring.GenerateKeys()      // Create Keys
 	case "CMDprotocolFS": // First step of Protocol
-		fmt.Println("Recieved protocols first step command")
+		log.Println("Recieved protocols first step command")
 		p.Deck.SetDeck(payload)
 		p.RespondToCommand(&ProtocolFirstStepCommand{}, stream)
 	case "CMDprotocolSS": // Second step of Protocol
-		fmt.Println("Recieved protocols second step command")
+		log.Println("Recieved protocols second step command")
 		p.Deck.SetDeck(payload)
 		p.RespondToCommand(&ProtocolFirstStepCommand{}, stream)
-	case "CMDstartround": // TODO: might have to split this up to send the lobby rules and actually get everyone to the game screen
-		fmt.Println("Recieved start round command")
+		p.SetHands() // Make sure at the end of the second step of the protocol to set everyones hands for that round
+	case "CMDinittable":
+		log.Println("Recieved init table command")
 		// Populate the state with peoples info
 		p.SetTurnOrderWithLobby()
 		// Set the rest of the state
 		p.gameState.FreshStateFromPayload(payload)
 		channelmanager.TGUI_PlayerInfo <- p.gameState.GetPlayerInfo() // Update GUI cards
-		p.RespondToCommand(&StartRoundCommand{}, stream)
+		p.RespondToCommand(&InitTableCommand{}, stream)
+	case "CMDrequesthand": // No payload, simply a peer requesting their card keys - the peerlist should all be signed before this ever gets called by a peer
+		log.Println("Recieved request hand command")
+		keyPayload := p.GetKeyPayloadForPlayersHand(stream.Conn().RemotePeer())
+		fmt.Println(keyPayload)
+		_, err := stream.Write([]byte(keyPayload))
+		if err != nil {
+			log.Printf("RequestHand: Failed to send keys to peer %s: %v\n", stream.Conn().RemotePeer(), err)
+		} else {
+			fmt.Printf("RequestHand: Sent keys to peer %s\n", stream.Conn().RemotePeer())
+		}
 	default:
 		log.Printf("Unknown Command Recieved: %s\n", command)
 	}
 }
-
 
 //////////////////////////////////////////// NEGOTIATION ///////////////////////////////////////////////////
 
@@ -126,7 +135,7 @@ func (gpl *GetPeerListCommand) Execute(peer *GokerPeer) {
 }
 
 func (gpl *GetPeerListCommand) Respond(peer *GokerPeer, sendingStream network.Stream) {
-	_, err := sendingStream.Write([]byte(peer.getPeerList())) 
+	_, err := sendingStream.Write([]byte(peer.getPeerList()))
 	if err != nil {
 		log.Printf("GetPeerlistCommand: Failed to send peer list: %v", err)
 	}
@@ -139,7 +148,7 @@ func (nr *NicknameRequestCommand) Execute(peer *GokerPeer) {
 	defer peer.peerListMutex.Unlock()
 
 	for _, peerInfo := range peer.peerList {
-		if  peerInfo.ID == peer.ThisHost.ID() { // If it's us
+		if peerInfo.ID == peer.ThisHost.ID() { // If it's us
 			continue
 		}
 		if peer.gameState.PlayerExists(peerInfo.ID) { // if the player already exists, then obviously we don't need their nickname
@@ -194,7 +203,7 @@ func (pq *SendPQCommand) Execute(peer *GokerPeer) {
 	defer peer.peerListMutex.Unlock()
 
 	for _, peerInfo := range peer.peerList {
-		if  peerInfo.ID == peer.ThisHost.ID() { 
+		if peerInfo.ID == peer.ThisHost.ID() {
 			continue
 		}
 		// Create a new stream to the peer
@@ -215,9 +224,7 @@ func (pq *SendPQCommand) Execute(peer *GokerPeer) {
 	}
 }
 
-func (pq *SendPQCommand) Respond(peer *GokerPeer, sendingStream network.Stream) {
-	return 
-}
+func (pq *SendPQCommand) Respond(peer *GokerPeer, sendingStream network.Stream) {}
 
 ///////////////////////////////////////////// PROTOCOL ///////////////////////////////////////////////////
 
@@ -284,7 +291,7 @@ type ProtocolSecondStepCommand struct{}
 func (sp *ProtocolSecondStepCommand) Execute(peer *GokerPeer) {
 	// First, the host of the game (the one initialing the protocols steps) will encrypt with variations
 	peer.DecryptAllWithGlobalKeys() // Decrypt global keys
-	peer.EncryptAllWithVariation() // Add encryption to every card
+	peer.EncryptAllWithVariation()  // Add encryption to every card
 
 	// Time to get the peers to do the same
 	peer.peerListMutex.Lock()
@@ -335,11 +342,11 @@ func (sp *ProtocolSecondStepCommand) Respond(peer *GokerPeer, sendingStream netw
 	}
 }
 
-//////////////////////////////////////////// ROUND COMMANDS /////////////////////////////////////////////////////
+//////////////////////////////////////////// INIT TABLE COMMAND /////////////////////////////////////////////////////
 
-type StartRoundCommand struct{}
+type InitTableCommand struct{}
 
-func (sg *StartRoundCommand) Execute(peer *GokerPeer) {
+func (it *InitTableCommand) Execute(peer *GokerPeer) {
 	peer.peerListMutex.Lock()
 	defer peer.peerListMutex.Unlock()
 
@@ -351,31 +358,73 @@ func (sg *StartRoundCommand) Execute(peer *GokerPeer) {
 		// Create a new stream to the peer
 		stream, err := peer.ThisHost.NewStream(context.Background(), peerInfo.ID, protocolID)
 		if err != nil {
-			log.Printf("StarRoundCommand: Failed to create stream to peer %s: %v\n", peerInfo.ID, err)
+			log.Printf("InitTableCommand: Failed to create stream to peer %s: %v\n", peerInfo.ID, err)
 			continue
 		}
 		defer stream.Close()
 
 		// Send table rules and the start command
-		_, err = stream.Write([]byte(fmt.Sprintf("CMDstartround %s\n\\END\n", peer.gameState.GetTableRules())))
+		_, err = stream.Write([]byte(fmt.Sprintf("CMDinittable %s\n\\END\n", peer.gameState.GetTableRules())))
 		if err != nil {
-			log.Printf("StartRoundCommand: Failed to send command to peer %s: %v\n", peerInfo.ID, err)
+			log.Printf("InitTableCommand: Failed to send command to peer %s: %v\n", peerInfo.ID, err)
 		} else {
-			fmt.Printf("StartRoundCommand: Sent command to peer %s\n", peerInfo.ID)
+			fmt.Printf("InitTableCommand: Sent command to peer %s\n", peerInfo.ID)
 		}
 	}
 }
 
-func (sg *StartRoundCommand) Respond(peer *GokerPeer, sendingStream network.Stream) {
-	peer.Deck.DisplayDeck()
-	//peer.gameState.DumpState()
-	channelmanager.FNET_StartRoundChan <- true
+func (it *InitTableCommand) Respond(peer *GokerPeer, sendingStream network.Stream) { // TODO: This will need to sign the table rules
+	//channelmanager.FNET_StartRoundChan <- true
 }
 
+//////////////////////////////////////////// REQUEST HAND COMMAND /////////////////////////////////////////////////////
+
+type RequestHandCommand struct{}
+
+func (rh *RequestHandCommand) Execute(peer *GokerPeer) {
+	peer.peerListMutex.Lock()
+	defer peer.peerListMutex.Unlock()
+
+	for _, peerInfo := range peer.peerList {
+		if peerInfo.ID == peer.ThisHost.ID() {
+			continue
+		}
+
+		stream, err := peer.ThisHost.NewStream(context.Background(), peerInfo.ID, protocolID)
+		if err != nil {
+			log.Printf("RequestHandCommand: Failed to create stream to host %s: %v\n", peerInfo.ID, err)
+			return
+		}
+		defer stream.Close()
+
+		_, err = stream.Write([]byte("CMDrequesthand\n\\END\n"))
+		if err != nil {
+			log.Printf("RequestHandCommand: Failed to send command to peer%s: %v\n", peerInfo.ID, err)
+		} else {
+			fmt.Printf("RequestHandCommand: Sent command to peer%s\n", peerInfo.ID)
+		}
+
+		// Read the response - we do this as they won't be sending an actual *command* back, just some text
+		responseBytes, err := io.ReadAll(stream)
+		if err != nil {
+			log.Printf("RequestHandCommand: Failed to read response from host %s: %v\n", peerInfo.ID, err)
+		} else {
+			keys := strings.Split(string(responseBytes), "\n")
+			fmt.Print("KEYS SENT BY A PEER: ")
+			fmt.Println(keys)
+			// TODO: Decrypt my cards with this peers keys
+			//peer.DecryptMyHand(keys[0], keys[1])
+		}
+	}
+}
+
+// Will do nothing
+func (rh *RequestHandCommand) Respond(peer *GokerPeer, sendingStream network.Stream) {}
+
+//////////////////////////////////////////// ROUND COMMANDS /////////////////////////////////////////////////////
 
 // TODO: Implement these.
 type RaiseCommand struct{}
 type CheckCommand struct{}
 type CallCommand struct{}
 type FoldCommand struct{}
-
