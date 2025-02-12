@@ -29,7 +29,8 @@ type GokerPeer struct {
 
 	// Other
 	Deck    *deckInfo    // Holds all deck logic (cards, deck operations etc.)
-	Hands   []HandInfo   // Holds all players hands
+	MyHand  HandInfo     // Holds my hand
+	Hands   []HandInfo   // Holds all other players hands
 	Keyring *sra.Keyring // Holds all encryption logic
 
 	// state given by the game manager

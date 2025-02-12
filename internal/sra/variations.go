@@ -53,6 +53,10 @@ func (k *Keyring) DecryptWithVariation(data *big.Int, index int) (*big.Int, erro
 	return new(big.Int).Exp(data, k.keyVariations[index].privateKey, k.globalN), nil
 }
 
+func (k *Keyring) DecryptWithKey(cipherText *big.Int, key *big.Int) *big.Int {
+	return new(big.Int).Exp(cipherText, key, k.globalN)
+}
+
 func (k *Keyring) GetKeyForCard(variationIndex int) *big.Int {
 	return k.keyVariations[variationIndex].privateKey
 }

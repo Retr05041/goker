@@ -4,7 +4,6 @@ package sra
 
 import (
 	"crypto/rand"
-	"crypto/sha256"
 	"fmt"
 	"math/big"
 )
@@ -88,7 +87,7 @@ func modInverse(a, m *big.Int) (*big.Int, error) {
 // This function also sets the needed 52 Variation keys
 func (k *Keyring) GenerateKeys() error {
 	if k.sharedP == nil || k.sharedQ == nil {
-		return fmt.Errorf("P and Q not set.")
+		return fmt.Errorf("p and q not set")
 	}
 	// n = p * q
 	n := new(big.Int).Mul(k.sharedP, k.sharedQ)
@@ -132,12 +131,6 @@ func generateRandomCoPrime(x *big.Int) (*big.Int, error) {
 	}
 }
 
-func HashMessage(message string) *big.Int {
-	hash := sha256.Sum256([]byte(message))
-	hashBigInt := new(big.Int).SetBytes(hash[:])
-	return hashBigInt
-}
-
 // Encrypts message (hash) with the global keys inside the keyring.
 // Should check if keys exist before attempting
 func (k *Keyring) EncryptWithGlobalKeys(data *big.Int) *big.Int {
@@ -148,18 +141,6 @@ func (k *Keyring) EncryptWithGlobalKeys(data *big.Int) *big.Int {
 // Should check if keys exist before attempting
 func (k *Keyring) DecryptWithGlobalKeys(data *big.Int) *big.Int {
 	return new(big.Int).Exp(data, k.globalPrivateKey, k.globalN)
-}
-
-// Use on hash after full decryption to pad it back to full and return it as a string
-func PadHash(hash *big.Int) string {
-	// Convert back to bytes
-	decryptedHash := hash.Bytes()
-
-	// Pad the decrypted hash to match the original hash size
-	expectedHash := make([]byte, sha256.Size)
-	copy(expectedHash[sha256.Size-len(decryptedHash):], decryptedHash)
-
-	return string(expectedHash)
 }
 
 // Returns P&Q as a string - meant for being sent over a stream for a PQRequest

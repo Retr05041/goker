@@ -56,7 +56,6 @@ func (p *GokerPeer) handleStream(stream network.Stream) {
 	// Split the command and the payload
 	parts := strings.SplitN(cleanedMessage, " ", 2)
 	command := parts[0]
-	fmt.Println(command)
 	var payload string
 	if len(parts) > 1 {
 		payload = parts[1]
@@ -77,12 +76,12 @@ func (p *GokerPeer) handleStream(stream network.Stream) {
 		p.Keyring.GenerateKeys()      // Create Keys
 	case "CMDprotocolFS": // First step of Protocol
 		log.Println("Recieved protocols first step command")
-		p.Deck.SetDeck(payload)
+		p.Deck.SetNewDeck(payload)
 		p.RespondToCommand(&ProtocolFirstStepCommand{}, stream)
 	case "CMDprotocolSS": // Second step of Protocol
 		log.Println("Recieved protocols second step command")
-		p.Deck.SetDeck(payload)
-		p.RespondToCommand(&ProtocolFirstStepCommand{}, stream)
+		p.Deck.SetDeckInPlace(payload)
+		p.RespondToCommand(&ProtocolSecondStepCommand{}, stream)
 		p.SetHands() // Make sure at the end of the second step of the protocol to set everyones hands for that round
 	case "CMDinittable":
 		log.Println("Recieved init table command")
@@ -95,7 +94,6 @@ func (p *GokerPeer) handleStream(stream network.Stream) {
 	case "CMDrequesthand": // No payload, simply a peer requesting their card keys - the peerlist should all be signed before this ever gets called by a peer
 		log.Println("Recieved request hand command")
 		keyPayload := p.GetKeyPayloadForPlayersHand(stream.Conn().RemotePeer())
-		fmt.Println(keyPayload)
 		_, err := stream.Write([]byte(keyPayload))
 		if err != nil {
 			log.Printf("RequestHand: Failed to send keys to peer %s: %v\n", stream.Conn().RemotePeer(), err)
@@ -264,7 +262,7 @@ func (sp *ProtocolFirstStepCommand) Execute(peer *GokerPeer) {
 		if err != nil {
 			log.Printf("ProtocolFirstStep: Failed to read response from host %s: %v\n", peer.sessionHost, err)
 		} else {
-			peer.Deck.SetDeck(string(responseBytes))
+			peer.Deck.SetNewDeck(string(responseBytes)) // Setting it as new as it was shuffled by the peer
 			fmt.Printf("ProtocolFirstStep: Received response from peer %s\n", peerInfo.ID)
 		}
 
@@ -279,7 +277,7 @@ func (sp *ProtocolFirstStepCommand) Respond(peer *GokerPeer, sendingStream netwo
 	processedDeck := peer.Deck.GenerateDeckPayload()
 
 	// Send the updated deck back to the sender
-	_, err := sendingStream.Write([]byte(fmt.Sprintf("%s\\END\n", processedDeck)))
+	_, err := sendingStream.Write([]byte(fmt.Sprintf("%s\n\\END", processedDeck)))
 	if err != nil {
 		log.Printf("StartProtocol Respond: Failed to send response: %v\n", err)
 	}
@@ -323,7 +321,7 @@ func (sp *ProtocolSecondStepCommand) Execute(peer *GokerPeer) {
 		if err != nil {
 			log.Printf("ProtocolSecondStep: Failed to read response from host %s: %v\n", peer.sessionHost, err)
 		} else {
-			peer.Deck.SetDeck(string(responseBytes)) // Setting the deck without changing it as no shuffling was done
+			peer.Deck.SetDeckInPlace(string(responseBytes)) // Setting the deck without changing it as no shuffling was done
 			fmt.Printf("ProtocolSecondStep: Received response from peer %s\n", peerInfo.ID)
 		}
 	}
@@ -385,6 +383,9 @@ func (rh *RequestHandCommand) Execute(peer *GokerPeer) {
 	peer.peerListMutex.Lock()
 	defer peer.peerListMutex.Unlock()
 
+	var cardOneKeys []string
+	var cardTwoKeys []string
+
 	for _, peerInfo := range peer.peerList {
 		if peerInfo.ID == peer.ThisHost.ID() {
 			continue
@@ -410,12 +411,12 @@ func (rh *RequestHandCommand) Execute(peer *GokerPeer) {
 			log.Printf("RequestHandCommand: Failed to read response from host %s: %v\n", peerInfo.ID, err)
 		} else {
 			keys := strings.Split(string(responseBytes), "\n")
-			fmt.Print("KEYS SENT BY A PEER: ")
-			fmt.Println(keys)
-			// TODO: Decrypt my cards with this peers keys
-			//peer.DecryptMyHand(keys[0], keys[1])
+			cardOneKeys = append(cardOneKeys, keys[0])
+			cardTwoKeys = append(cardTwoKeys, keys[1])
 		}
 	}
+
+	peer.DecryptMyHand(cardOneKeys, cardTwoKeys)
 }
 
 // Will do nothing
