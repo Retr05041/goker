@@ -13,6 +13,10 @@ build:
 # Run the application
 run: build
 	$(BUILD_DIR)/$(APP_NAME)
+	
+# Run tests
+test:
+	go test ./... 
 
 # Clean up build files
 clean:
