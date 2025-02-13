@@ -62,7 +62,7 @@ func (p *GokerPeer) handleStream(stream network.Stream) {
 	}
 
 	// Process the command based on the message
-	switch command {
+	switch command { // These commands are in order for which they should be called
 	case "CMDgetpeers": // Send peerlist to just this stream
 		fmt.Println("Recieved peer list request")
 		p.RespondToCommand(&GetPeerListCommand{}, stream)
@@ -74,15 +74,6 @@ func (p *GokerPeer) handleStream(stream network.Stream) {
 		pq := strings.Split(payload, "\n")
 		p.Keyring.SetPQ(pq[0], pq[1]) // Set P and Q
 		p.Keyring.GenerateKeys()      // Create Keys
-	case "CMDprotocolFS": // First step of Protocol
-		log.Println("Recieved protocols first step command")
-		p.Deck.SetNewDeck(payload)
-		p.RespondToCommand(&ProtocolFirstStepCommand{}, stream)
-	case "CMDprotocolSS": // Second step of Protocol
-		log.Println("Recieved protocols second step command")
-		p.Deck.SetDeckInPlace(payload)
-		p.RespondToCommand(&ProtocolSecondStepCommand{}, stream)
-		p.SetHands() // Make sure at the end of the second step of the protocol to set everyones hands for that round
 	case "CMDinittable":
 		log.Println("Recieved init table command")
 		// Populate the state with peoples info
@@ -91,7 +82,33 @@ func (p *GokerPeer) handleStream(stream network.Stream) {
 		p.gameState.FreshStateFromPayload(payload)
 		channelmanager.TGUI_PlayerInfo <- p.gameState.GetPlayerInfo() // Update GUI cards
 		p.RespondToCommand(&InitTableCommand{}, stream)
-	case "CMDrequesthand": // No payload, simply a peer requesting their card keys - the peerlist should all be signed before this ever gets called by a peer
+	case "CMDprotocolFS": // First step of Protocol
+		log.Println("Recieved protocols first step command")
+		p.Deck.SetNewDeck(payload)
+		p.RespondToCommand(&ProtocolFirstStepCommand{}, stream)
+	case "CMDprotocolFSDeck": // Final shuffled deck sent to everyone (at this point it should be signed by everyone, which I need to implement)
+		log.Println("Recieved protocols first step set deck command")
+		p.Deck.SetNewDeck(payload) // We don't need to send anything back
+	case "CMDprotocolSS": // Second step of Protocol - decrypt, encrypt, send back to host...
+		log.Println("Recieved protocols second step command")
+		p.Deck.SetDeckInPlace(payload)
+		p.RespondToCommand(&ProtocolSecondStepCommand{}, stream)
+	case "CMDprotocolSSDeck": // Final shuffled deck sent to everyone (at this point it should be signed by everyone, which I need to implement)
+		log.Println("Recieved protocols second step set deck command")
+		p.Deck.SetDeckInPlace(payload)
+		p.SetHands()                            // Make sure at the end of the second step of the protocol to set everyones hands for that round
+		p.ExecuteCommand(&RequestHandCommand{}) // At this point, everyone should have the deck and we can request our hand
+
+		cardOneName, exists := p.Deck.GetCardFromRefDeck(p.MyHand.Hand[0].CardValue)
+		if !exists {
+			log.Println("Couldn't find card one")
+		}
+		cardTwoName, exists := p.Deck.GetCardFromRefDeck(p.MyHand.Hand[1].CardValue)
+		if !exists {
+			log.Println("Couldn't find card two")
+		}
+		fmt.Println("My cards this round: " + cardOneName + " and " + cardTwoName)
+	case "CMDrequesthand": // Someone is requesting the keys to their hand
 		log.Println("Recieved request hand command")
 		keyPayload := p.GetKeyPayloadForPlayersHand(stream.Conn().RemotePeer())
 		_, err := stream.Write([]byte(keyPayload))
@@ -236,12 +253,15 @@ func (sp *ProtocolFirstStepCommand) Execute(peer *GokerPeer) {
 	peer.peerListMutex.Lock()
 	defer peer.peerListMutex.Unlock()
 
+	// So I don't have to set the deck each turn
+	finalDeck := peer.Deck.GenerateDeckPayload()
+
+	// Get each peer to shuffle and encrypt deck
 	for _, peerInfo := range peer.peerList {
 		if peerInfo.ID == peer.ThisHost.ID() {
 			continue
 		}
 
-		// Create a new stream to the peer
 		stream, err := peer.ThisHost.NewStream(context.Background(), peerInfo.ID, protocolID)
 		if err != nil {
 			log.Printf("ProtocolFirstStep: Failed to create stream to peer %s: %v\n", peerInfo.ID, err)
@@ -249,24 +269,45 @@ func (sp *ProtocolFirstStepCommand) Execute(peer *GokerPeer) {
 		}
 		defer stream.Close()
 
-		// Send the deck
-		_, err = stream.Write([]byte(fmt.Sprintf("CMDprotocolFS %s\n\\END\n", peer.Deck.GenerateDeckPayload())))
+		_, err = stream.Write([]byte(fmt.Sprintf("CMDprotocolFS %s\n\\END\n", finalDeck)))
 		if err != nil {
 			log.Printf("ProtocolFirstStep: Failed to send deck to peer %s: %v\n", peerInfo.ID, err)
 		} else {
-			fmt.Printf("ProtocolFirstStep: Sent deck to peer %s\n", peerInfo.ID)
+			log.Printf("ProtocolFirstStep: Sent deck to peer %s\n", peerInfo.ID)
 		}
 
-		// Get the response (the new deck)
 		responseBytes, err := io.ReadAll(stream)
 		if err != nil {
 			log.Printf("ProtocolFirstStep: Failed to read response from host %s: %v\n", peer.sessionHost, err)
 		} else {
-			peer.Deck.SetNewDeck(string(responseBytes)) // Setting it as new as it was shuffled by the peer
-			fmt.Printf("ProtocolFirstStep: Received response from peer %s\n", peerInfo.ID)
+			finalDeck = string(responseBytes) // Setting it for next peer to do
+			log.Printf("ProtocolFirstStep: Received response from peer %s\n", peerInfo.ID)
+		}
+	}
+
+	// After all peers have processed, broadcast the final deck to everyone - This is where they will validate signatures?
+	for _, peerInfo := range peer.peerList {
+		if peerInfo.ID == peer.ThisHost.ID() {
+			continue
 		}
 
+		stream, err := peer.ThisHost.NewStream(context.Background(), peerInfo.ID, protocolID)
+		if err != nil {
+			log.Printf("ProtocolFirstStep: Failed to broadcast final deck to peer %s: %v\n", peerInfo.ID, err)
+			continue
+		}
+		defer stream.Close()
+
+		_, err = stream.Write([]byte(fmt.Sprintf("CMDprotocolFSDeck %s\n\\END\n", finalDeck)))
+		if err != nil {
+			log.Printf("ProtocolFirstStep: Failed to send final deck to peer %s\n", peerInfo.ID)
+		} else {
+			fmt.Printf("ProtocolFirstStep: Broadcasted final deck to peer %s\n", peerInfo.ID)
+		}
 	}
+
+	peer.Deck.SetNewDeck(finalDeck) // Set the final deck for host
+
 }
 
 // Respond to a protocol's first command - Encrypt with global keys, shuffle, then send back - when this is called a new deck should be set already
@@ -295,6 +336,9 @@ func (sp *ProtocolSecondStepCommand) Execute(peer *GokerPeer) {
 	peer.peerListMutex.Lock()
 	defer peer.peerListMutex.Unlock()
 
+	// So I don't have to set the deck each turn
+	finalDeck := peer.Deck.GenerateDeckPayload()
+
 	for _, peerInfo := range peer.peerList {
 		if peerInfo.ID == peer.ThisHost.ID() {
 			continue
@@ -309,7 +353,7 @@ func (sp *ProtocolSecondStepCommand) Execute(peer *GokerPeer) {
 		defer stream.Close()
 
 		// Send the deck
-		_, err = stream.Write([]byte(fmt.Sprintf("CMDprotocolSS %s\n\\END\n", peer.Deck.GenerateDeckPayload())))
+		_, err = stream.Write([]byte(fmt.Sprintf("CMDprotocolSS %s\n\\END\n", finalDeck)))
 		if err != nil {
 			log.Printf("ProtocolSecondStep: Failed to send deck to peer %s: %v\n", peerInfo.ID, err)
 		} else {
@@ -321,10 +365,32 @@ func (sp *ProtocolSecondStepCommand) Execute(peer *GokerPeer) {
 		if err != nil {
 			log.Printf("ProtocolSecondStep: Failed to read response from host %s: %v\n", peer.sessionHost, err)
 		} else {
-			peer.Deck.SetDeckInPlace(string(responseBytes)) // Setting the deck without changing it as no shuffling was done
+			finalDeck = string(responseBytes)
 			fmt.Printf("ProtocolSecondStep: Received response from peer %s\n", peerInfo.ID)
 		}
 	}
+
+	for _, peerInfo := range peer.peerList {
+		if peerInfo.ID == peer.ThisHost.ID() {
+			continue
+		}
+
+		stream, err := peer.ThisHost.NewStream(context.Background(), peerInfo.ID, protocolID)
+		if err != nil {
+			log.Printf("ProtocolSecondStep: Failed to broadcast final deck to peer %s: %v\n", peerInfo.ID, err)
+			continue
+		}
+		defer stream.Close()
+
+		_, err = stream.Write([]byte(fmt.Sprintf("CMDprotocolSSDeck %s\n\\END\n", finalDeck)))
+		if err != nil {
+			log.Printf("ProtocolSecondStep: Failed to send final deck to peer %s\n", peerInfo.ID)
+		} else {
+			fmt.Printf("ProtocolSecondStep: Broadcasted final deck to peer %s\n", peerInfo.ID)
+		}
+	}
+
+	peer.Deck.SetDeckInPlace(finalDeck) // As we want to have each card correlate to their original variation index
 }
 
 // Respond to the protocols second command - Decrypt global keys, encrypt with variation, then send back- when this is called a new deck should be set already
