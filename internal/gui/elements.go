@@ -10,14 +10,14 @@ import (
 
 var (
 	// Lobby
-	numOfPlayers = widget.NewLabel(fmt.Sprintf("# of players: %d", 1))
+	numOfPlayers    = widget.NewLabel(fmt.Sprintf("# of players: %d", 1))
 	loopbackAddress string
-	lanAddress string
+	lanAddress      string
 
 	// Game
-	boardSize = fyne.NewSize((234*5)/2, 333/2) // 234x333 per card
-	handSize = fyne.NewSize((234*2)/2, 333/2) // 234x333
-	handGrid  = container.NewGridWrap(boardSize) // Holds the hand images
+	boardSize = fyne.NewSize((234*5)/2, 333/2)   // 234x333 per card
+	handSize  = fyne.NewSize((234*2)/2, 333/2)   // 234x333
+	handGrid  = container.NewGridWrap(handSize)  // Holds the hand images
 	boardGrid = container.NewGridWrap(boardSize) // Holds the hand images
 
 	playerCards = container.NewVBox()

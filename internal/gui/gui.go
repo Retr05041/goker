@@ -31,7 +31,7 @@ func Init() {
 	initElements()
 
 	// Listen for updated from GameManager
-	go gmListener()
+	go gmListener(mainWindow)
 
 	// Init everything on the GM side
 	channelmanager.FGUI_ActionChan <- channelmanager.ActionType{Action: "Init"}
@@ -45,7 +45,7 @@ func Init() {
 }
 
 // Since we want to keep logic out of the GUI, this will listen for any updates from specific parts of the state
-func gmListener() {
+func gmListener(window fyne.Window) {
 	for {
 		select {
 		case hand := <-channelmanager.TGUI_HandChan: // Hand = whatever is coming in from the handChannel
@@ -60,6 +60,8 @@ func gmListener() {
 			updateAddress(address)
 		case playerInfo := <-channelmanager.TGUI_PlayerInfo:
 			updateCards(playerInfo)
+		case _ = <-channelmanager.TGUI_StartRound:
+			showGameScreen(window)
 		}
 	}
 }
@@ -69,7 +71,7 @@ func updateHandImages(hand []*canvas.Image) {
 	for _, image := range hand {
 		newGrid.Add(image)
 	}
-	handGrid = container.NewGridWrap(handSize, newGrid)
+	handGrid.Objects = []fyne.CanvasObject{newGrid}
 	handGrid.Refresh()
 }
 
@@ -78,7 +80,7 @@ func updateBoardImages(board []*canvas.Image) {
 	for _, image := range board {
 		newGrid.Add(image)
 	}
-	boardGrid = container.NewGridWrap(boardSize, newGrid)
+	boardGrid.Objects = []fyne.CanvasObject{newGrid}
 	boardGrid.Refresh()
 }
 

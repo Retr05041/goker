@@ -6,7 +6,6 @@ import (
 	"goker/internal/gamestate"
 	"goker/internal/gui"
 	"goker/internal/p2p"
-	"log"
 
 	"fyne.io/fyne/v2/canvas"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -76,23 +75,12 @@ func (gm *GameManager) listenForActions() {
 				gm.network.ExecuteCommand(&p2p.ProtocolSecondStepCommand{}) // Setting up deck pt.2 & Sets everyones hands
 
 				// Setup hands
-				gm.network.SetHands()
-				gm.network.ExecuteCommand(&p2p.RequestHandCommand{}) // Get the keys for YOUR hand
-
-				cardOneName, exists := gm.network.Deck.GetCardFromRefDeck(gm.network.MyHand.Hand[0].CardValue) // Should be the hash
-				if !exists {
-					log.Println("Couldn't find card one")
-				}
-				cardTwoName, exists := gm.network.Deck.GetCardFromRefDeck(gm.network.MyHand.Hand[1].CardValue)
-				if !exists {
-					log.Println("Couldn't find card two")
-				}
-				fmt.Println("My cards this round: " + cardOneName + " and " + cardTwoName)
+				gm.network.ExecuteCommand(&p2p.CanRequestHand{})     // Tell everyone they can request their keys now
+				gm.network.ExecuteCommand(&p2p.RequestHandCommand{}) // Get the keys for YOUR hand and set it in the GUI
 
 				//gm.network.ExecuteCommand(&p2p.KeyExchangeCommand{}) // Everyone sends each others timelocked payload to each other and they all begin to crack it
 
-				//gm.state.DumpState()
-				channelmanager.TGUI_StartRound <- struct{}{} // Tell GUI to move to the table UI
+				gm.network.ExecuteCommand(&p2p.MoveToTableCommand{}) // Tell everyone to move to the game table
 			case "Raise":
 				// Handle raise action
 				fmt.Println("Handling Raise action")

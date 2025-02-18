@@ -1,313 +1,418 @@
 package p2p
 
 import (
-	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"goker/internal/channelmanager"
-	"io"
 	"log"
 	"strings"
+	"sync"
 
 	"github.com/libp2p/go-libp2p/core/network"
+	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 // Uses Command Design Pattern
-type Command interface {
+type PeerCommand interface {
 	Execute(peer *GokerPeer)
 	Respond(peer *GokerPeer, sendingStream network.Stream)
 }
 
 // Execute a command
-func (p *GokerPeer) ExecuteCommand(command Command) {
-	command.Execute(p)
+func (p *GokerPeer) ExecuteCommand(pCmd PeerCommand) {
+	pCmd.Execute(p)
 }
 
 // Respond to a command
-func (p *GokerPeer) RespondToCommand(command Command, stream network.Stream) {
-	command.Respond(p, stream)
+func (p *GokerPeer) RespondToCommand(pCmd PeerCommand, stream network.Stream) {
+	pCmd.Respond(p, stream)
+}
+
+// Structure for messages to be sent over the network
+type NetworkCommand struct {
+	Command string `json:"command"`
+	Payload any    `json:"payload"`
+}
+
+// Send a network command to a specific stream
+func sendCommand(stream network.Stream, nCmd NetworkCommand) error {
+	encoder := json.NewEncoder(stream)
+	if err := encoder.Encode(nCmd); err != nil {
+		return fmt.Errorf("failed to send command: %w", err)
+	}
+	return nil
+}
+
+// Recieve a network command from a specifc stream
+func receiveResponse(stream network.Stream) (NetworkCommand, error) {
+	var cmd NetworkCommand
+	decoder := json.NewDecoder(stream)
+
+	if err := decoder.Decode(&cmd); err != nil {
+		return NetworkCommand{}, fmt.Errorf("recieveResponse: failed to decode command: %w", err)
+	}
+
+	return cmd, nil
 }
 
 // Handle incoming streams (should be commands only)
 func (p *GokerPeer) handleStream(stream network.Stream) {
 	defer stream.Close()
 
-	// Read incoming command
-	var message strings.Builder
-	reader := bufio.NewReader(stream)
-	for {
-		// Read line by line
-		line, err := reader.ReadString('\n')
-		if err != nil {
-			log.Println("handleStream: error reading from stream: %w", err)
-		}
+	// Create a JSON decoder for reading the incoming command
+	decoder := json.NewDecoder(stream)
+	var nCmd NetworkCommand
 
-		// Check for the end marker
-		if strings.TrimSpace(line) == "\\END" {
-			break
-		}
-
-		// Append the line to the payload
-		message.WriteString(line)
-	}
-
-	cleanedMessage := strings.TrimSpace(message.String())
-
-	// Split the command and the payload
-	parts := strings.SplitN(cleanedMessage, " ", 2)
-	command := parts[0]
-	var payload string
-	if len(parts) > 1 {
-		payload = parts[1]
+	// Decode the command
+	if err := decoder.Decode(&nCmd); err != nil {
+		log.Printf("Failed to decode incoming network command: %v", err)
+		return
 	}
 
 	// Process the command based on the message
-	switch command { // These commands are in order for which they should be called
-	case "CMDgetpeers": // Send peerlist to just this stream
-		fmt.Println("Recieved peer list request")
+	// These commands are in order for which they should be called
+	switch nCmd.Command {
+	case "GetPeers":
 		p.RespondToCommand(&GetPeerListCommand{}, stream)
-	case "CMDnicknamerequest":
-		log.Println("Recieved nickname request command")
+	case "NicknameRequest":
 		p.RespondToCommand(&NicknameRequestCommand{}, stream)
-	case "CMDsendpq": // No need to build a response for this
-		log.Println("Recieved Send P & Q command")
-		pq := strings.Split(payload, "\n")
-		p.Keyring.SetPQ(pq[0], pq[1]) // Set P and Q
-		p.Keyring.GenerateKeys()      // Create Keys
-	case "CMDinittable":
-		log.Println("Recieved init table command")
-		// Populate the state with peoples info
+	case "InitTable":
 		p.SetTurnOrderWithLobby()
-		// Set the rest of the state
-		p.gameState.FreshStateFromPayload(payload)
-		channelmanager.TGUI_PlayerInfo <- p.gameState.GetPlayerInfo() // Update GUI cards
-		p.RespondToCommand(&InitTableCommand{}, stream)
-	case "CMDprotocolFS": // First step of Protocol
-		log.Println("Recieved protocols first step command")
-		p.Deck.SetNewDeck(payload)
+		p.gameState.FreshStateFromPayload(nCmd.Payload.(string))
+		channelmanager.TGUI_PlayerInfo <- p.gameState.GetPlayerInfo()
+		p.RespondToCommand(&InitTableCommand{}, stream) // Respond with DONE
+	case "SendPQ":
+		pq := strings.Split(string(nCmd.Payload.(string)), "\n")
+		p.Keyring.SetPQ(pq[0], pq[1])
+		p.Keyring.GenerateKeys()
+		p.RespondToCommand(&SendPQCommand{}, stream) // Respond with DONE
+	case "ProtocolFS": // First step of Protocol
+		p.Deck.SetNewDeck(nCmd.Payload.(string))
 		p.RespondToCommand(&ProtocolFirstStepCommand{}, stream)
-	case "CMDprotocolFSDeck": // Final shuffled deck sent to everyone (at this point it should be signed by everyone, which I need to implement)
-		log.Println("Recieved protocols first step set deck command")
-		p.Deck.SetNewDeck(payload) // We don't need to send anything back
-	case "CMDprotocolSS": // Second step of Protocol - decrypt, encrypt, send back to host...
-		log.Println("Recieved protocols second step command")
-		p.Deck.SetDeckInPlace(payload)
+	case "BroadcastNewDeck": // First shuffled deck (will be shuffled so needs to be set as a new deck)
+		p.Deck.SetNewDeck(nCmd.Payload.(string))
+		p.RespondToCommand(&BroadcastNewDeck{}, stream)
+	case "ProtocolSS": // Second step of Protocol
+		p.Deck.SetDeckInPlace(nCmd.Payload.(string))
 		p.RespondToCommand(&ProtocolSecondStepCommand{}, stream)
-	case "CMDprotocolSSDeck": // Final shuffled deck sent to everyone (at this point it should be signed by everyone, which I need to implement)
-		log.Println("Recieved protocols second step set deck command")
-		p.Deck.SetDeckInPlace(payload)
-		p.SetHands()                            // Make sure at the end of the second step of the protocol to set everyones hands for that round
-		p.ExecuteCommand(&RequestHandCommand{}) // At this point, everyone should have the deck and we can request our hand
-
-		cardOneName, exists := p.Deck.GetCardFromRefDeck(p.MyHand.Hand[0].CardValue)
-		if !exists {
-			log.Println("Couldn't find card one")
-		}
-		cardTwoName, exists := p.Deck.GetCardFromRefDeck(p.MyHand.Hand[1].CardValue)
-		if !exists {
-			log.Println("Couldn't find card two")
-		}
-		fmt.Println("My cards this round: " + cardOneName + " and " + cardTwoName)
-	case "CMDrequesthand": // Someone is requesting the keys to their hand
-		log.Println("Recieved request hand command")
-		keyPayload := p.GetKeyPayloadForPlayersHand(stream.Conn().RemotePeer())
-		_, err := stream.Write([]byte(keyPayload))
-		if err != nil {
-			log.Printf("RequestHand: Failed to send keys to peer %s: %v\n", stream.Conn().RemotePeer(), err)
-		} else {
-			fmt.Printf("RequestHand: Sent keys to peer %s\n", stream.Conn().RemotePeer())
-		}
+	case "BroadcastDeck": // Final shuffled deck
+		p.Deck.SetDeckInPlace(nCmd.Payload.(string))
+		p.SetHands() // Make sure at the end of the second step of the protocol to set everyones hands for that round
+		p.RespondToCommand(&BroadcastDeck{}, stream)
+	case "CanRequestHand": // Once everythings ready this will be recieved from the host, so everyone can reqeust their cards
+		p.ExecuteCommand(&RequestHandCommand{})
+	case "RequestHand": // Someone is requesting the keys to their hand
+		p.RespondToCommand(&RequestHandCommand{}, stream)
+	case "MoveToTable":
+		channelmanager.TGUI_StartRound <- struct{}{} // Tell GUI to move to the table UI
 	default:
-		log.Printf("Unknown Command Recieved: %s\n", command)
+		log.Printf("Unknown Command Recieved: %s\n", nCmd.Command)
 	}
 }
 
 //////////////////////////////////////////// NEGOTIATION ///////////////////////////////////////////////////
 
+// Sent to host to get the most up to date peer list
 type GetPeerListCommand struct{}
 
 func (gpl *GetPeerListCommand) Execute(peer *GokerPeer) {
 	stream, err := peer.ThisHost.NewStream(context.Background(), peer.sessionHost.ID, protocolID)
 	if err != nil {
-		log.Printf("GetPeerListCommand: Failed to create stream to host %s: %v\n", peer.sessionHost, err)
+		log.Printf("GetPeerListCommand: failed to create stream to host %s: %v\n", peer.sessionHost, err)
 		return
 	}
 	defer stream.Close()
 
-	// Aquire and set peerlist
-	_, err = stream.Write([]byte("CMDgetpeers\n\\END\n"))
-	if err != nil {
-		log.Fatalf("GetPeerListCommand: Failed to send CMDgetpeers command: %v", err)
+	// Create and send the command
+	request := NetworkCommand{
+		Command: "GetPeers",
+		Payload: nil, // No payload needed for this request
 	}
 
-	peerListBytes, err := io.ReadAll(stream)
-	if err != nil {
-		log.Fatalf("GetPeerListCommand: Failed to read peer list: %v", err)
+	if err := sendCommand(stream, request); err != nil {
+		log.Fatalf("GetPeerListCommand: failed to send getpeers command: %v", err)
 	}
 
-	peer.setPeerListAndConnect(string(peerListBytes))
-	log.Println("GetPeerListCommand: Received and set peerlist.")
+	// Receive and decode the response
+	response, err := receiveResponse(stream)
+	if err != nil {
+		log.Fatalf("GetPeerListCommand: failed to receive peer list: %v", err)
+	}
+
+	// Ensure the response payload is a string
+	peerList, ok := response.Payload.(string)
+	if !ok {
+		log.Fatalf("GetPeerListCommand: invalid response format: expected string, got %T", response.Payload)
+	}
+
+	peer.setPeerListAndConnect(peerList)
+	log.Println("GetPeerListCommand: received and set peerlist.")
 }
 
 func (gpl *GetPeerListCommand) Respond(peer *GokerPeer, sendingStream network.Stream) {
-	_, err := sendingStream.Write([]byte(peer.getPeerList()))
-	if err != nil {
-		log.Printf("GetPeerlistCommand: Failed to send peer list: %v", err)
+	defer sendingStream.Close()
+
+	response := NetworkCommand{
+		Command: "GetPeers",
+		Payload: peer.getPeerList(),
+	}
+
+	if err := sendCommand(sendingStream, response); err != nil {
+		log.Printf("GetPeerListCommand: failed to send peer list: %v", err)
 	}
 }
 
-type NicknameRequestCommand struct{} // Loops through every peer in the peer list, and for any we don't have nicknames for, request one
+// Sent to everyone new joining to add to state
+type NicknameRequestCommand struct{}
 
 func (nr *NicknameRequestCommand) Execute(peer *GokerPeer) {
 	peer.peerListMutex.Lock()
 	defer peer.peerListMutex.Unlock()
 
 	for _, peerInfo := range peer.peerList {
-		if peerInfo.ID == peer.ThisHost.ID() { // If it's us
+		// If it's us
+		if peerInfo.ID == peer.ThisHost.ID() {
 			continue
 		}
-		if peer.gameState.PlayerExists(peerInfo.ID) { // if the player already exists, then obviously we don't need their nickname
+		// if the player already exists, then obviously we don't need their nickname
+		if peer.gameState.PlayerExists(peerInfo.ID) {
 			continue
 		}
 
 		// Create a new stream to the peer
 		stream, err := peer.ThisHost.NewStream(context.Background(), peerInfo.ID, protocolID)
 		if err != nil {
-			log.Printf("NicknameRequest: Failed to create stream to host %s: %v\n", peerInfo.ID, err)
+			log.Printf("NicknameRequest: failed to create stream to host %s: %v\n", peerInfo.ID, err)
 			return
 		}
 		defer stream.Close()
 
-		_, err = stream.Write([]byte("CMDnicknamerequest\n\\END\n"))
-		if err != nil {
-			log.Printf("NicknameRequest: Failed to send command to peer%s: %v\n", peerInfo.ID, err)
-		} else {
-			fmt.Printf("NicknameRequest: Sent command to peer%s\n", peerInfo.ID)
+		// Create command
+		request := NetworkCommand{
+			Command: "NicknameRequest",
+			Payload: nil, // No payload needed for this request
 		}
 
-		// Read the response - we do this as they won't be sending an actual *command* back, just some text
-		responseBytes, err := io.ReadAll(stream)
-		if err != nil {
-			log.Printf("NicknameRequest: Failed to read response from host %s: %v\n", peerInfo.ID, err)
-		} else {
-			peerNickname := strings.Split(string(responseBytes), "\n")
-			fmt.Printf("NicknameRequest: Received response from peer: %s -- Nickname: %s\n", peerInfo.ID, peerNickname[0])
-			peer.gameState.AddPeerToState(peerInfo.ID, peerNickname[0]) // Finally add peer to gamestate
+		// Send command through stream
+		if err := sendCommand(stream, request); err != nil {
+			log.Fatalf("NicknameRequest: failed to send NicknameRequest command: %v", err)
 		}
+
+		// Receive and decode the response
+		response, err := receiveResponse(stream)
+		if err != nil {
+			log.Fatalf("NicknameRequest: failed to read response from host %s: %v\n", peerInfo.ID, err)
+		}
+
+		// Ensure the response payload is a string
+		nickname, ok := response.Payload.(string)
+		if !ok {
+			log.Fatalf("NicknameRequest: nickname not a string from peer: %v\n", peerInfo.ID)
+		}
+
+		peerNickname := strings.Split(nickname, "\n")
+		log.Printf("NicknameRequest: Received response from peer: %s -- Nickname: %s\n", peerInfo.ID, peerNickname[0])
+		peer.gameState.AddPeerToState(peerInfo.ID, peerNickname[0]) // Finally add peer to gamestate
 	}
 }
 
 func (nr *NicknameRequestCommand) Respond(peer *GokerPeer, sendingStream network.Stream) {
-	myNickname := peer.gameState.GetNickname(peer.ThisHost.ID())
-	_, err := sendingStream.Write([]byte(myNickname))
-	if err != nil {
-		log.Printf("NicknameRequest: Failed to send nickname to peer %s: %v\n", sendingStream.Conn().RemotePeer(), err)
-	} else {
-		fmt.Printf("NicknameRequest: Sent nickname to peer %s\n", sendingStream.Conn().RemotePeer())
+	defer sendingStream.Close()
+
+	response := NetworkCommand{
+		Command: "NicknameRequest",
+		Payload: peer.gameState.GetNickname(peer.ThisHost.ID()),
+	}
+
+	if err := sendCommand(sendingStream, response); err != nil {
+		log.Printf("NicknameRequestCommand: failed to send nickname: %v", err)
+	}
+}
+
+//////////////////////////////////////////// INIT TABLE COMMAND /////////////////////////////////////////////////////
+
+// Sent to everyone to set the table rules for the game
+type InitTableCommand struct{}
+
+func (it *InitTableCommand) Execute(p *GokerPeer) {
+	var wg sync.WaitGroup
+
+	p.peerListMutex.Lock()
+	for _, peerInfo := range p.peerList {
+		if peerInfo.ID == p.ThisHost.ID() {
+			continue
+		}
+
+		wg.Add(1)
+
+		go func(peerID peer.ID) {
+			defer wg.Done()
+			// Create a new stream to the peer
+			stream, err := p.ThisHost.NewStream(context.Background(), peerInfo.ID, protocolID)
+			if err != nil {
+				log.Printf("InitTableCommand: Failed to create stream to peer %s: %v\n", peerInfo.ID, err)
+			}
+			defer stream.Close()
+
+			command := NetworkCommand{
+				Command: "InitTable",
+				Payload: p.gameState.GetTableRules(),
+			}
+
+			if err := sendCommand(stream, command); err != nil {
+				log.Fatalf("InitTableCommand: failed to send getpeers command: %v", err)
+			}
+
+			response, err := receiveResponse(stream)
+			if err != nil {
+				log.Fatalf("InitTableCommand: failed to recieve response from peer: %v", err)
+			}
+
+			doneResponse, ok := response.Payload.(string)
+			if !ok {
+				log.Fatalf("InitTableCommand: invalid response format: expected string, got %T", response.Payload)
+			}
+
+			if doneResponse != "DONE" {
+				log.Fatalf("InitTableCommand: response from peer was not 'DONE', got %s", doneResponse)
+			}
+		}(peerInfo.ID)
+	}
+	p.peerListMutex.Unlock()
+
+	wg.Wait()
+	log.Println("InitTableCommand: All available peers responded, proceeding...")
+}
+
+func (it *InitTableCommand) Respond(peer *GokerPeer, sendingStream network.Stream) {
+	response := NetworkCommand{
+		Command: "InitTable",
+		Payload: "DONE",
+	}
+
+	if err := sendCommand(sendingStream, response); err != nil {
+		log.Fatalf("InitTableCommand: failed to send 'DONE': %v", err)
 	}
 }
 
 ////////////////////////////////////////// KEYRING //////////////////////////////////////////////////////
 
-// Send P and Q to all peers in the network so they may generate their GenerateKeys
-// TODO: Have all peers validate P and Q's bit length and that they are prime then sign and send to next
+// Send P and Q to everyone for this rounds keyring
+// TODO: Find a better way to do this?
 type SendPQCommand struct{}
 
-func (pq *SendPQCommand) Execute(peer *GokerPeer) {
-	peer.peerListMutex.Lock()
-	defer peer.peerListMutex.Unlock()
+func (pq *SendPQCommand) Execute(p *GokerPeer) {
+	var wg sync.WaitGroup
 
-	for _, peerInfo := range peer.peerList {
-		if peerInfo.ID == peer.ThisHost.ID() {
+	p.peerListMutex.Lock()
+	for _, peerInfo := range p.peerList {
+		if peerInfo.ID == p.ThisHost.ID() {
 			continue
 		}
-		// Create a new stream to the peer
-		stream, err := peer.ThisHost.NewStream(context.Background(), peerInfo.ID, protocolID)
-		if err != nil {
-			log.Printf("SendPQCommand: Failed to create stream to peer %s: %v\n", peerInfo.ID, err)
-			return
-		}
-		defer stream.Close()
 
-		PQData := peer.Keyring.GetPQString()
-		_, err = stream.Write([]byte(fmt.Sprintf("CMDsendpq %s\n\\END\n", PQData)))
-		if err != nil {
-			log.Printf("SendPQCommand: Failed to send command to host %s: %v\n", peerInfo.ID, err)
-		} else {
-			fmt.Printf("SendPQCommand: Sent command to peer %s\n", peerInfo.ID)
-		}
+		wg.Add(1)
+
+		go func(peerID peer.ID) {
+			defer wg.Done()
+			// Create a new stream to the peer
+			stream, err := p.ThisHost.NewStream(context.Background(), peerID, protocolID)
+			if err != nil {
+				log.Printf("SendPQCommand: Failed to create stream to peer %s: %v\n", peerID, err)
+			}
+			defer stream.Close()
+
+			command := NetworkCommand{
+				Command: "SendPQ",
+				Payload: p.Keyring.GetPQString(),
+			}
+
+			if err := sendCommand(stream, command); err != nil {
+				log.Fatalf("SendPQCommand: failed to send SendPQ command: %v", err)
+			}
+
+			response, err := receiveResponse(stream)
+			if err != nil {
+				log.Fatalf("SendPQCommand: failed to recieve response from peer: %v", err)
+			}
+
+			doneResponse, ok := response.Payload.(string)
+			if !ok {
+				log.Fatalf("SendPQCommand: invalid response format: expected string, got %T", response.Payload)
+			}
+
+			if doneResponse != "DONE" {
+				log.Fatalf("SendPQCommand: response from peer was not 'DONE', got %s", doneResponse)
+			}
+		}(peerInfo.ID)
+	}
+	p.peerListMutex.Unlock()
+
+	wg.Wait()
+	log.Println("SendPQCommand: All available peers responded, proceeding...")
+}
+
+func (pq *SendPQCommand) Respond(peer *GokerPeer, sendingStream network.Stream) {
+	response := NetworkCommand{
+		Command: "SendPQ",
+		Payload: "DONE",
+	}
+
+	if err := sendCommand(sendingStream, response); err != nil {
+		log.Fatalf("SendPQCommand: failed to send 'DONE': %v", err)
 	}
 }
 
-func (pq *SendPQCommand) Respond(peer *GokerPeer, sendingStream network.Stream) {}
-
-///////////////////////////////////////////// PROTOCOL ///////////////////////////////////////////////////
+///////////////////////////////////////////// PROTOCOL FIRST STEP ///////////////////////////////////////////////////
 
 type ProtocolFirstStepCommand struct{}
 
 // Send deck to every peer, allow them to shuffle and encrypt the deck
-func (sp *ProtocolFirstStepCommand) Execute(peer *GokerPeer) {
-	peer.EncryptAllWithGlobalKeys()
-	peer.Deck.ShuffleRoundDeck()
+func (sp *ProtocolFirstStepCommand) Execute(p *GokerPeer) {
+	p.EncryptAllWithGlobalKeys()
+	p.Deck.ShuffleRoundDeck()
 
-	peer.peerListMutex.Lock()
-	defer peer.peerListMutex.Unlock()
+	p.peerListMutex.Lock()
 
 	// So I don't have to set the deck each turn
-	finalDeck := peer.Deck.GenerateDeckPayload()
+	command := NetworkCommand{
+		Command: "ProtocolFS",
+		Payload: p.Deck.GenerateDeckPayload(),
+	}
 
 	// Get each peer to shuffle and encrypt deck
-	for _, peerInfo := range peer.peerList {
-		if peerInfo.ID == peer.ThisHost.ID() {
+	for _, peerInfo := range p.peerList {
+		if peerInfo.ID == p.ThisHost.ID() {
 			continue
 		}
 
-		stream, err := peer.ThisHost.NewStream(context.Background(), peerInfo.ID, protocolID)
+		stream, err := p.ThisHost.NewStream(context.Background(), peerInfo.ID, protocolID)
 		if err != nil {
 			log.Printf("ProtocolFirstStep: Failed to create stream to peer %s: %v\n", peerInfo.ID, err)
 			continue
 		}
 		defer stream.Close()
 
-		_, err = stream.Write([]byte(fmt.Sprintf("CMDprotocolFS %s\n\\END\n", finalDeck)))
-		if err != nil {
-			log.Printf("ProtocolFirstStep: Failed to send deck to peer %s: %v\n", peerInfo.ID, err)
-		} else {
-			log.Printf("ProtocolFirstStep: Sent deck to peer %s\n", peerInfo.ID)
+		if err := sendCommand(stream, command); err != nil {
+			log.Fatalf("ProtocolFirstStepCommand: failed to send deck: %v", err)
 		}
 
-		responseBytes, err := io.ReadAll(stream)
+		response, err := receiveResponse(stream)
 		if err != nil {
-			log.Printf("ProtocolFirstStep: Failed to read response from host %s: %v\n", peer.sessionHost, err)
-		} else {
-			finalDeck = string(responseBytes) // Setting it for next peer to do
-			log.Printf("ProtocolFirstStep: Received response from peer %s\n", peerInfo.ID)
+			log.Fatalf("ProtocolFirstStepCommand: failed to recieve deck from peer: %v", err)
 		}
+
+		newDeck, ok := response.Payload.(string)
+		if !ok {
+			log.Fatalf("ProtocolFirstStep: invalid response format: expected string, got %T", response.Payload)
+		}
+
+		command.Payload = newDeck // So the next peer has an up to date deck
 	}
 
-	// After all peers have processed, broadcast the final deck to everyone - This is where they will validate signatures?
-	for _, peerInfo := range peer.peerList {
-		if peerInfo.ID == peer.ThisHost.ID() {
-			continue
-		}
-
-		stream, err := peer.ThisHost.NewStream(context.Background(), peerInfo.ID, protocolID)
-		if err != nil {
-			log.Printf("ProtocolFirstStep: Failed to broadcast final deck to peer %s: %v\n", peerInfo.ID, err)
-			continue
-		}
-		defer stream.Close()
-
-		_, err = stream.Write([]byte(fmt.Sprintf("CMDprotocolFSDeck %s\n\\END\n", finalDeck)))
-		if err != nil {
-			log.Printf("ProtocolFirstStep: Failed to send final deck to peer %s\n", peerInfo.ID)
-		} else {
-			fmt.Printf("ProtocolFirstStep: Broadcasted final deck to peer %s\n", peerInfo.ID)
-		}
-	}
-
-	peer.Deck.SetNewDeck(finalDeck) // Set the final deck for host
-
+	p.Deck.SetNewDeck(command.Payload.(string)) // Set the final deck for host
+	log.Println("ProtocolFirstStepCommand: All peers have contributed, broadcasting new deck...")
+	p.ExecuteCommand(&BroadcastNewDeck{})
 }
 
 // Respond to a protocol's first command - Encrypt with global keys, shuffle, then send back - when this is called a new deck should be set already
@@ -315,133 +420,249 @@ func (sp *ProtocolFirstStepCommand) Respond(peer *GokerPeer, sendingStream netwo
 	// Encrypt the deck with your global keys, shuffle it, then create a new payload to send back
 	peer.EncryptAllWithGlobalKeys()
 	peer.Deck.ShuffleRoundDeck()
-	processedDeck := peer.Deck.GenerateDeckPayload()
 
-	// Send the updated deck back to the sender
-	_, err := sendingStream.Write([]byte(fmt.Sprintf("%s\n\\END", processedDeck)))
-	if err != nil {
-		log.Printf("StartProtocol Respond: Failed to send response: %v\n", err)
+	response := NetworkCommand{
+		Command: "ProtocolFirstStep",
+		Payload: peer.Deck.GenerateDeckPayload(),
+	}
+
+	if err := sendCommand(sendingStream, response); err != nil {
+		log.Fatalf("ProtocolFirstStep: failed to send 'DONE' back to peer: %v", err)
 	}
 }
 
+// Send the new deck to everyone - Everyone will need to set the deck as if it was new
+type BroadcastNewDeck struct{}
+
+func (b *BroadcastNewDeck) Execute(p *GokerPeer) {
+	defer p.peerListMutex.Unlock() // Since this is called RIGHT after the first round of the protocol is done, it can unlock the peerlist
+
+	var wg sync.WaitGroup
+
+	command := NetworkCommand{
+		Command: "BroadcastNewDeck",
+		Payload: p.Deck.GenerateDeckPayload(),
+	}
+
+	// After all peers have processed, broadcast the final deck to everyone - This is where they will validate signatures?
+	for _, peerInfo := range p.peerList {
+		if peerInfo.ID == p.ThisHost.ID() {
+			continue
+		}
+
+		wg.Add(1)
+
+		go func(peerID peer.ID) {
+			defer wg.Done()
+
+			stream, err := p.ThisHost.NewStream(context.Background(), peerInfo.ID, protocolID)
+			if err != nil {
+				log.Fatalf("BroadcastNewDeck: failed to setup stream to peer %s: %v\n", peerInfo.ID, err)
+			}
+			defer stream.Close()
+
+			if err := sendCommand(stream, command); err != nil {
+				log.Fatalf("BroadcastNewDeck: failed to send deck: %v", err)
+			}
+
+			response, err := receiveResponse(stream)
+			if err != nil {
+				log.Fatalf("BroadcastNewDeck: failed to recieve response from peer: %v", err)
+			}
+
+			doneResponse, ok := response.Payload.(string)
+			if !ok {
+				log.Fatalf("BroadcastNewDeck: invalid response format: expected string, got %T", response.Payload)
+			}
+
+			if doneResponse != "DONE" {
+				log.Fatalf("BroadcastNewDeck: response from peer was not 'DONE', got %s", doneResponse)
+			}
+
+		}(peerInfo.ID)
+	}
+
+	wg.Wait()
+	log.Println("BroadcastNewDeck: All peers have recieved deck, continueing...")
+}
+
+func (b *BroadcastNewDeck) Respond(p *GokerPeer, sendingStream network.Stream) {
+	response := NetworkCommand{
+		Command: "BroadcastNewDeck",
+		Payload: "DONE",
+	}
+
+	if err := sendCommand(sendingStream, response); err != nil {
+		log.Fatalf("BroadcastNewDeck: failed to send 'DONE' back to peer: %v", err)
+	}
+}
+
+///////////////////////////////////////////// PROTOCOL SECOND STEP ///////////////////////////////////////////////////
+
+// Send deck to every peer, have them decrypt their global keys then encrypt the deck with variations and send back
 type ProtocolSecondStepCommand struct{}
 
 // For getting others to encrypt with their variation keys
-func (sp *ProtocolSecondStepCommand) Execute(peer *GokerPeer) {
+func (sp *ProtocolSecondStepCommand) Execute(p *GokerPeer) {
+	p.peerListMutex.Lock() // Same thing as first step, the broadcast will unlock the mutex
+
 	// First, the host of the game (the one initialing the protocols steps) will encrypt with variations
-	peer.DecryptAllWithGlobalKeys() // Decrypt global keys
-	peer.EncryptAllWithVariation()  // Add encryption to every card
+	p.DecryptAllWithGlobalKeys() // Decrypt global keys
+	p.EncryptAllWithVariation()  // Add encryption to every card
 
-	// Time to get the peers to do the same
-	peer.peerListMutex.Lock()
-	defer peer.peerListMutex.Unlock()
+	command := NetworkCommand{
+		Command: "ProtocolSS",
+		Payload: p.Deck.GenerateDeckPayload(),
+	}
 
-	// So I don't have to set the deck each turn
-	finalDeck := peer.Deck.GenerateDeckPayload()
-
-	for _, peerInfo := range peer.peerList {
-		if peerInfo.ID == peer.ThisHost.ID() {
+	for _, peerInfo := range p.peerList {
+		if peerInfo.ID == p.ThisHost.ID() {
 			continue
 		}
 
 		// Create a new stream to the peer
-		stream, err := peer.ThisHost.NewStream(context.Background(), peerInfo.ID, protocolID)
+		stream, err := p.ThisHost.NewStream(context.Background(), peerInfo.ID, protocolID)
 		if err != nil {
 			log.Printf("ProtocolSecondStep: Failed to create stream to peer %s: %v\n", peerInfo.ID, err)
 			continue
 		}
 		defer stream.Close()
 
-		// Send the deck
-		_, err = stream.Write([]byte(fmt.Sprintf("CMDprotocolSS %s\n\\END\n", finalDeck)))
-		if err != nil {
-			log.Printf("ProtocolSecondStep: Failed to send deck to peer %s: %v\n", peerInfo.ID, err)
-		} else {
-			fmt.Printf("ProtocolSecondStep: Sent deck to peer %s\n", peerInfo.ID)
+		if err := sendCommand(stream, command); err != nil {
+			log.Fatalf("ProtocolSecondStep: failed to send deck to peer")
 		}
 
-		// Get the response (the new deck)
-		responseBytes, err := io.ReadAll(stream)
+		response, err := receiveResponse(stream)
 		if err != nil {
-			log.Printf("ProtocolSecondStep: Failed to read response from host %s: %v\n", peer.sessionHost, err)
-		} else {
-			finalDeck = string(responseBytes)
-			fmt.Printf("ProtocolSecondStep: Received response from peer %s\n", peerInfo.ID)
+			log.Fatalf("ProtocolSecondStep: failed to receive a response from peer %s: %v", peerInfo.ID, err)
 		}
+
+		newDeck, ok := response.Payload.(string)
+		if !ok {
+			log.Fatalf("ProtocolSecondStep: invalid response format: expected string, got %T", response.Payload)
+		}
+
+		command.Payload = newDeck
 	}
 
-	for _, peerInfo := range peer.peerList {
-		if peerInfo.ID == peer.ThisHost.ID() {
-			continue
-		}
-
-		stream, err := peer.ThisHost.NewStream(context.Background(), peerInfo.ID, protocolID)
-		if err != nil {
-			log.Printf("ProtocolSecondStep: Failed to broadcast final deck to peer %s: %v\n", peerInfo.ID, err)
-			continue
-		}
-		defer stream.Close()
-
-		_, err = stream.Write([]byte(fmt.Sprintf("CMDprotocolSSDeck %s\n\\END\n", finalDeck)))
-		if err != nil {
-			log.Printf("ProtocolSecondStep: Failed to send final deck to peer %s\n", peerInfo.ID)
-		} else {
-			fmt.Printf("ProtocolSecondStep: Broadcasted final deck to peer %s\n", peerInfo.ID)
-		}
-	}
-
-	peer.Deck.SetDeckInPlace(finalDeck) // As we want to have each card correlate to their original variation index
+	p.Deck.SetDeckInPlace(command.Payload.(string))
+	p.SetHands() // Now that the new deck is in place, we can set hands
+	log.Println("ProtocolSecondStepCommand: All peers have contributed, broadcasting deck...")
+	p.ExecuteCommand(&BroadcastDeck{})
 }
 
 // Respond to the protocols second command - Decrypt global keys, encrypt with variation, then send back- when this is called a new deck should be set already
 func (sp *ProtocolSecondStepCommand) Respond(peer *GokerPeer, sendingStream network.Stream) {
 	peer.DecryptAllWithGlobalKeys()
 	peer.EncryptAllWithVariation()
-	processedDeck := peer.Deck.GenerateDeckPayload()
 
-	// Send the updated deck back to the sender
-	_, err := sendingStream.Write([]byte(fmt.Sprintf("%s\\END\n", processedDeck)))
-	if err != nil {
-		log.Printf("StartProtocol Respond: Failed to send response: %v\n", err)
+	response := NetworkCommand{
+		Command: "ProtocolSecondStep",
+		Payload: peer.Deck.GenerateDeckPayload(),
+	}
+
+	if err := sendCommand(sendingStream, response); err != nil {
+		log.Fatalf("ProtocolSecondStep: failed to send deck back to peer: %v", err)
 	}
 }
 
-//////////////////////////////////////////// INIT TABLE COMMAND /////////////////////////////////////////////////////
+// Send the unchanged (no shuffling) deck to everyone
+type BroadcastDeck struct{}
 
-type InitTableCommand struct{}
+func (b *BroadcastDeck) Execute(p *GokerPeer) {
+	defer p.peerListMutex.Unlock()
 
-func (it *InitTableCommand) Execute(peer *GokerPeer) {
-	peer.peerListMutex.Lock()
-	defer peer.peerListMutex.Unlock()
+	var wg sync.WaitGroup
 
-	for _, peerInfo := range peer.peerList {
-		if peerInfo.ID == peer.ThisHost.ID() {
-			continue
-		}
-
-		// Create a new stream to the peer
-		stream, err := peer.ThisHost.NewStream(context.Background(), peerInfo.ID, protocolID)
-		if err != nil {
-			log.Printf("InitTableCommand: Failed to create stream to peer %s: %v\n", peerInfo.ID, err)
-			continue
-		}
-		defer stream.Close()
-
-		// Send table rules and the start command
-		_, err = stream.Write([]byte(fmt.Sprintf("CMDinittable %s\n\\END\n", peer.gameState.GetTableRules())))
-		if err != nil {
-			log.Printf("InitTableCommand: Failed to send command to peer %s: %v\n", peerInfo.ID, err)
-		} else {
-			fmt.Printf("InitTableCommand: Sent command to peer %s\n", peerInfo.ID)
-		}
+	command := NetworkCommand{
+		Command: "BroadcastDeck",
+		Payload: p.Deck.GenerateDeckPayload(),
 	}
+
+	for _, peerInfo := range p.peerList {
+		if peerInfo.ID == p.ThisHost.ID() {
+			continue
+		}
+
+		wg.Add(1)
+
+		go func(peerID peer.ID) {
+			defer wg.Done()
+
+			stream, err := p.ThisHost.NewStream(context.Background(), peerInfo.ID, protocolID)
+			if err != nil {
+				log.Fatalf("BroadcastDeck: failed to setup stream to peer %s: %v\n", peerInfo.ID, err)
+			}
+			defer stream.Close()
+
+			if err := sendCommand(stream, command); err != nil {
+				log.Fatalf("BroadcastDeck: failed to send deck: %v", err)
+			}
+
+			response, err := receiveResponse(stream)
+			if err != nil {
+				log.Fatalf("BroadcastDeck: failed to recieve response from peer: %v", err)
+			}
+
+			doneResponse, ok := response.Payload.(string)
+			if !ok {
+				log.Fatalf("BroadcastDeck: invalid response format: expected string, got %T", response.Payload)
+			}
+
+			if doneResponse != "DONE" {
+				log.Fatalf("BroadcastDeck: response from peer was not 'DONE', got %s", doneResponse)
+			}
+
+		}(peerInfo.ID)
+	}
+
+	wg.Wait()
+	log.Println("BroadcastDeck: All peers have recieved final deck, continueing...")
 }
 
-func (it *InitTableCommand) Respond(peer *GokerPeer, sendingStream network.Stream) { // TODO: This will need to sign the table rules
-	//channelmanager.FNET_StartRoundChan <- true
+func (b *BroadcastDeck) Respond(p *GokerPeer, sendingStream network.Stream) {
+	response := NetworkCommand{
+		Command: "BroadcastDeck",
+		Payload: "DONE",
+	}
+
+	if err := sendCommand(sendingStream, response); err != nil {
+		log.Fatalf("BroadcastDeck: failed to send 'DONE' back to peer: %v", err)
+	}
 }
 
 //////////////////////////////////////////// REQUEST HAND COMMAND /////////////////////////////////////////////////////
+
+// Updates everyone that they can request their hand
+type CanRequestHand struct{}
+
+func (c *CanRequestHand) Execute(p *GokerPeer) {
+	p.peerListMutex.Lock()
+	defer p.peerListMutex.Unlock()
+
+	command := NetworkCommand{
+		Command: "CanRequestHand",
+	}
+
+	for _, peerInfo := range p.peerList {
+		if peerInfo.ID == p.ThisHost.ID() {
+			continue
+		}
+
+		stream, err := p.ThisHost.NewStream(context.Background(), peerInfo.ID, protocolID)
+		if err != nil {
+			log.Printf("CanRequestHand: failed to create stream to host %s: %v\n", peerInfo.ID, err)
+			return
+		}
+		defer stream.Close()
+
+		if err := sendCommand(stream, command); err != nil {
+			log.Fatalf("CanRequestHand: failed to send command to peer %s: %v", peerInfo.ID, err)
+		}
+	}
+}
+
+func (c *CanRequestHand) Respond(p *GokerPeer, sendingStream network.Stream) {}
 
 type RequestHandCommand struct{}
 
@@ -452,6 +673,10 @@ func (rh *RequestHandCommand) Execute(peer *GokerPeer) {
 	var cardOneKeys []string
 	var cardTwoKeys []string
 
+	command := NetworkCommand{
+		Command: "RequestHand",
+	}
+
 	for _, peerInfo := range peer.peerList {
 		if peerInfo.ID == peer.ThisHost.ID() {
 			continue
@@ -459,36 +684,89 @@ func (rh *RequestHandCommand) Execute(peer *GokerPeer) {
 
 		stream, err := peer.ThisHost.NewStream(context.Background(), peerInfo.ID, protocolID)
 		if err != nil {
-			log.Printf("RequestHandCommand: Failed to create stream to host %s: %v\n", peerInfo.ID, err)
+			log.Printf("RequestHand: Failed to create stream to host %s: %v\n", peerInfo.ID, err)
 			return
 		}
 		defer stream.Close()
 
-		_, err = stream.Write([]byte("CMDrequesthand\n\\END\n"))
-		if err != nil {
-			log.Printf("RequestHandCommand: Failed to send command to peer%s: %v\n", peerInfo.ID, err)
-		} else {
-			fmt.Printf("RequestHandCommand: Sent command to peer%s\n", peerInfo.ID)
+		if err := sendCommand(stream, command); err != nil {
+			log.Fatalf("RequestHand: failed to send command to peer %s: %v", peerInfo.ID, err)
 		}
 
-		// Read the response - we do this as they won't be sending an actual *command* back, just some text
-		responseBytes, err := io.ReadAll(stream)
+		response, err := receiveResponse(stream)
 		if err != nil {
-			log.Printf("RequestHandCommand: Failed to read response from host %s: %v\n", peerInfo.ID, err)
-		} else {
-			keys := strings.Split(string(responseBytes), "\n")
-			cardOneKeys = append(cardOneKeys, keys[0])
-			cardTwoKeys = append(cardTwoKeys, keys[1])
+			log.Fatalf("RequestHand: failed to recieve response from peer: %s", peerInfo.ID)
+		}
+
+		keyPayload, ok := response.Payload.(string)
+		if !ok {
+			log.Fatalf("RequestHand: invalid response format: expected string, got %T", response.Payload)
+		}
+
+		keys := strings.Split(keyPayload, "\n")
+		cardOneKeys = append(cardOneKeys, keys[0])
+		cardTwoKeys = append(cardTwoKeys, keys[1])
+	}
+
+	// Now that I have all the keys for my hand, decrypt the hand
+	peer.DecryptMyHand(cardOneKeys, cardTwoKeys)
+
+	// Set the hand in the GUI
+	cardOneName, exists := peer.Deck.GetCardFromRefDeck(peer.MyHand.Hand[0].CardValue) // Should be the hash
+	if !exists {
+		log.Println("Couldn't find card one")
+	}
+	cardTwoName, exists := peer.Deck.GetCardFromRefDeck(peer.MyHand.Hand[1].CardValue)
+	if !exists {
+		log.Println("Couldn't find card two")
+	}
+	peer.sendHandToGUI(cardOneName, cardTwoName)
+}
+
+func (rh *RequestHandCommand) Respond(peer *GokerPeer, sendingStream network.Stream) {
+	response := NetworkCommand{
+		Command: "RequestHand",
+		Payload: peer.GetKeyPayloadForPlayersHand(sendingStream.Conn().RemotePeer()),
+	}
+
+	if err := sendCommand(sendingStream, response); err != nil {
+		log.Fatalf("RequestHand: failed to send keys back to peer: %v", err)
+	}
+}
+
+//////////////////////////////////////////// ROUND COMMANDS /////////////////////////////////////////////////////
+
+type MoveToTableCommand struct{}
+
+func (mtt *MoveToTableCommand) Execute(peer *GokerPeer) {
+	peer.peerListMutex.Lock()
+	defer peer.peerListMutex.Unlock()
+
+	command := NetworkCommand{
+		Command: "MoveToTable",
+	}
+
+	for _, peerInfo := range peer.peerList {
+		if peerInfo.ID == peer.ThisHost.ID() {
+			continue
+		}
+
+		stream, err := peer.ThisHost.NewStream(context.Background(), peerInfo.ID, protocolID)
+		if err != nil {
+			log.Printf("MoveToTable: Failed to create stream to host %s: %v\n", peerInfo.ID, err)
+			return
+		}
+		defer stream.Close()
+
+		if err := sendCommand(stream, command); err != nil {
+			log.Fatalf("MoveToTable: failed to send command to peer %s: %v", peerInfo.ID, err)
 		}
 	}
 
-	peer.DecryptMyHand(cardOneKeys, cardTwoKeys)
+	channelmanager.TGUI_StartRound <- struct{}{} // Tell GUI to move to the table UI
 }
 
-// Will do nothing
-func (rh *RequestHandCommand) Respond(peer *GokerPeer, sendingStream network.Stream) {}
-
-//////////////////////////////////////////// ROUND COMMANDS /////////////////////////////////////////////////////
+func (mtt *MoveToTableCommand) Respond(peer *GokerPeer, sendingStream network.Stream) {}
 
 // TODO: Implement these.
 type RaiseCommand struct{}

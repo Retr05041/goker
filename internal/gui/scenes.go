@@ -56,8 +56,6 @@ func showMenuUI(givenWindow fyne.Window) {
 func showHostUI(givenWindow fyne.Window) {
 	playButton := widget.NewButton("Play", func() {
 		channelmanager.FGUI_ActionChan <- channelmanager.ActionType{Action: "startRound"}
-		<- channelmanager.TGUI_StartRound
-		showGameScreen(givenWindow)
 	})
 	copyLBAddrButton := widget.NewButton("Copy LB address", func() {
 		givenWindow.Clipboard().SetContent(loopbackAddress)
@@ -80,12 +78,6 @@ func showConnectedUI(givenWindow fyne.Window) {
 	setWindowContent(givenWindow,
 		container.NewCenter(
 			container.NewVBox(numOfPlayers, waiting)))
-
-	// Goroutine to monitor the startGame variable
-	go func() {
-		<- channelmanager.FNET_StartRoundChan
-		showGameScreen(givenWindow)
-	}()
 }
 
 // Main game screen
@@ -105,9 +97,9 @@ func showGameScreen(givenWindow fyne.Window) {
 
 	setWindowContent(givenWindow,
 		container.NewBorder(
-			nil, 
-			nil, 
-			playerCards, 
+			nil,
+			nil,
+			playerCards,
 			container.NewCenter(
 				container.NewVBox(
 					container.NewCenter(potLabel),

@@ -3,12 +3,13 @@ package p2p
 import (
 	"crypto/hmac"
 	"crypto/sha256"
-	"fmt"
+	"goker/internal/channelmanager"
 	"log"
 	"math/big"
 	"math/rand"
 	"strings"
 
+	"fyne.io/fyne/v2/canvas"
 	"github.com/libp2p/go-libp2p/core/peer"
 )
 
@@ -40,11 +41,7 @@ var suits = [...]string{"hearts", "diamonds", "clubs", "spades"}
 func generateCardHash(card string, secretKey string) *big.Int {
 	h := hmac.New(sha256.New, []byte(secretKey))
 	h.Write([]byte(card))
-	hBytes := h.Sum(nil) // 32 bytes (SHA-256 output)
-
-	// Apply padding (PKCS#1-style, leading zeroes for RSA)
-	//paddedHash := make([]byte, 256)
-	//copy(paddedHash[256-len(hBytes):], hBytes) // Right-align hash in the padded array
+	hBytes := h.Sum(nil)
 
 	hash := new(big.Int).SetBytes(hBytes)
 	return hash
@@ -97,14 +94,7 @@ func (d *deckInfo) ShuffleRoundDeck() {
 }
 
 func (d *deckInfo) GetCardFromRefDeck(cardHash *big.Int) (key string, ok bool) {
-	//cardBytes := cardHash.Bytes() // Convert big.Int back to bytes
-
-	// Remove leading zeros (unpadding)
-	//unpaddedHash := new(big.Int).SetBytes(cardBytes)
 	for k, v := range d.ReferenceDeck {
-		// Unpad stored deck hashes for comparison
-		//storedBytes := v.Bytes()
-		//storedUnpadded := new(big.Int).SetBytes(storedBytes)
 
 		if v.Cmp(cardHash) == 0 {
 			return k, true
@@ -179,7 +169,6 @@ func (p *GokerPeer) EncryptAllWithGlobalKeys() {
 
 // Encrypt deck with variation numbers
 func (p *GokerPeer) EncryptAllWithVariation() {
-	log.Println("EncryptAllWithVariation: Function Called")
 	for i, card := range p.Deck.RoundDeck {
 		encryptedCard, err := p.Keyring.EncryptWithVariation(card.CardValue, i)
 		if err != nil {
@@ -202,13 +191,7 @@ func (p *GokerPeer) GetKeyPayloadForPlayersHand(peerID peer.ID) string {
 			}
 
 			cardOneKey := p.Keyring.GetKeyForCard(handInfo.Hand[0].VariationIndex)
-			//log.Println("Peer is requesting key for card: " + handInfo.Hand[0].CardValue.String())
-			//log.Println("Key given to peer for that card: " + cardOneKey.String())
-			log.Println(handInfo.Hand[0].VariationIndex)
 			cardTwoKey := p.Keyring.GetKeyForCard(handInfo.Hand[1].VariationIndex)
-			//log.Println("Peer is requesting key for card: " + handInfo.Hand[1].CardValue.String())
-			//log.Println("Key given to peer for that card: " + cardTwoKey.String())
-			log.Println(handInfo.Hand[1].VariationIndex)
 
 			if cardOneKey == nil || cardTwoKey == nil {
 				log.Println("error: Could not retrieve key for one or both cards")
@@ -225,8 +208,6 @@ func (p *GokerPeer) GetKeyPayloadForPlayersHand(peerID peer.ID) string {
 		log.Println("warning: No matching hand found for peer")
 	}
 
-	log.Print("KEYS BEING SENT: ")
-	fmt.Println(keys)
 	return strings.Join(keys, "\n")
 }
 
@@ -253,13 +234,10 @@ func (p *GokerPeer) SetHands() {
 			Hand: []CardInfo{*cardOne, *cardTwo},
 		})
 	}
-
-	p.DumpRoundDeck() // To see what the FUCK is going on
 }
 
 // Decrypts my hand in the hands array given to key strings
 func (p *GokerPeer) DecryptMyHand(cardOneKeys []string, cardTwoKeys []string) {
-	log.Println(cardOneKeys)
 	for _, key := range cardOneKeys {
 		keyOne, success := new(big.Int).SetString(key, 10)
 		if !success {
@@ -271,7 +249,6 @@ func (p *GokerPeer) DecryptMyHand(cardOneKeys []string, cardTwoKeys []string) {
 		p.MyHand.Hand[0].CardValue = myCardOne
 	}
 
-	log.Println(cardTwoKeys)
 	for _, key := range cardTwoKeys {
 		keyTwo, success := new(big.Int).SetString(key, 10)
 		if !success {
@@ -288,24 +265,25 @@ func (p *GokerPeer) DecryptMyHand(cardOneKeys []string, cardTwoKeys []string) {
 		return
 	}
 	p.MyHand.Hand[0].CardValue = plaintextCardOne
-	//fmt.Println("Card 1 after full decryption: " + p.MyHand.Hand[0].CardValue.String())
 
 	plaintextCardTwo, err := p.Keyring.DecryptWithVariation(p.MyHand.Hand[1].CardValue, p.MyHand.Hand[1].VariationIndex)
 	if err != nil {
 		return
 	}
 	p.MyHand.Hand[1].CardValue = plaintextCardTwo
-	//fmt.Println("Card 2 after full decryption: " + p.MyHand.Hand[0].CardValue.String())
 }
 
-func (p *GokerPeer) DumpRoundDeck() {
-	if p.Deck == nil || len(p.Deck.RoundDeck) == 0 {
-		log.Println("DumpRoundDeck: Round deck is empty or uninitialized")
-		return
-	}
+// Load images for my hand and send them to GUI
+func (p *GokerPeer) sendHandToGUI(cardOneName, cardTwoName string) {
+	log.Printf("Sending cards to GUI: %s, %s\n", cardOneName, cardTwoName)
+	cardOne := canvas.NewImageFromFile("media/svg_playing_cards/fronts/png_96_dpi/" + cardOneName + ".png")
+	cardOne.FillMode = canvas.ImageFillOriginal
 
-	log.Println("Dumping Round Deck:")
-	for i, card := range p.Deck.RoundDeck {
-		log.Printf("Card %d: Value = %s, Variation Index = %d\n", i, card.CardValue.String(), card.VariationIndex)
-	}
+	cardTwo := canvas.NewImageFromFile("media/svg_playing_cards/fronts/png_96_dpi/" + cardTwoName + ".png")
+	cardTwo.FillMode = canvas.ImageFillOriginal
+
+	newHand := make([]*canvas.Image, 0, 2)
+	newHand = append(newHand, cardOne)
+	newHand = append(newHand, cardTwo)
+	channelmanager.TGUI_HandChan <- newHand
 }

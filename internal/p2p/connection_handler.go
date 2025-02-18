@@ -21,31 +21,31 @@ func (p *GokerPeer) connectToHost(peerAddr string) {
 	// Convert the address string to a Multiaddr
 	addr, err := multiaddr.NewMultiaddr(peerAddr)
 	if err != nil {
-		log.Fatalf("Invalid address: %v", err)
+		log.Printf("connectToHost: %v\n", err)
+		return
 	}
 
 	// Get peer information from the address
 	pinfo, err := peer.AddrInfoFromP2pAddr(addr)
 	if err != nil {
-		log.Fatalf("Failed to get peer info: %v", err)
+		log.Printf("connectToHost: %v\n", err)
+		return
 	}
 
 	// Connect to the host
 	if err := p.ThisHost.Connect(ctx, *pinfo); err != nil {
-		log.Fatalf("Failed to connect to bootstrap peer: %v", err)
+		log.Printf("connectToHost: %v\n", err)
+		return
 	}
 
 	log.Printf("Connected to host: %s\n", pinfo.ID)
-
 	// Set sessionHost
 	p.sessionHost = peerInfo{ID: pinfo.ID, Addr: addr}
 
-	// Get and set peerlist from host
 	p.ExecuteCommand(&GetPeerListCommand{})
+
+	p.ExecuteCommand(&NicknameRequestCommand{})
 
 	// Tell GUI to change the number of players
 	channelmanager.FNET_NumOfPlayersChan <- len(p.peerList)
-
-	// Request Nicknames and add them to the state
-	p.ExecuteCommand(&NicknameRequestCommand{})
 }

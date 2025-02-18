@@ -1,8 +1,9 @@
 package gamemanager
 
 import (
-	"fyne.io/fyne/v2/canvas"
 	"goker/internal/channelmanager"
+
+	"fyne.io/fyne/v2/canvas"
 )
 
 // Setup hand with back of cards
@@ -27,19 +28,6 @@ func (gm *GameManager) initBoard() {
 	}
 
 	channelmanager.TGUI_BoardChan <- gm.Board
-}
-
-// Load two cards into your hand and update the grid
-func (gm *GameManager) loadHand(cardOneName, cardTwoName string) {
-	cardOne := canvas.NewImageFromFile("media/svg_playing_cards/fronts/png_96_dpi/" + cardOneName + ".png")
-	cardOne.FillMode = canvas.ImageFillOriginal
-
-	cardTwo := canvas.NewImageFromFile("media/svg_playing_cards/fronts/png_96_dpi/" + cardTwoName + ".png")
-	cardTwo.FillMode = canvas.ImageFillOriginal
-
-	gm.MyHand[0] = cardOne
-	gm.MyHand[1] = cardTwo
-	channelmanager.TGUI_HandChan <- gm.MyHand
 }
 
 func (gm *GameManager) loadFlop(cardOneName, cardTwoName, cardThreeName string) {

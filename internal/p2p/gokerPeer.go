@@ -15,7 +15,7 @@ import (
 	"github.com/multiformats/go-multiaddr"
 )
 
-var protocolID = protocol.ID("/goker/1.0.0")
+var protocolID = protocol.ID("/goker/command/1.0.0")
 
 type GokerPeer struct {
 	// Network logic
