@@ -78,6 +78,7 @@ func (gm *GameManager) listenForActions() {
 				gm.network.ExecuteCommand(&p2p.CanRequestHand{})     // Tell everyone they can request their keys now
 				gm.network.ExecuteCommand(&p2p.RequestHandCommand{}) // Get the keys for YOUR hand and set it in the GUI
 
+				// TODO:
 				//gm.network.ExecuteCommand(&p2p.KeyExchangeCommand{}) // Everyone sends each others timelocked payload to each other and they all begin to crack it
 
 				gm.network.ExecuteCommand(&p2p.MoveToTableCommand{}) // Tell everyone to move to the game table
@@ -85,17 +86,15 @@ func (gm *GameManager) listenForActions() {
 				// Handle raise action
 				fmt.Println("Handling Raise action")
 
-				// Update state locally
-				gm.state.PlayersMoney[gm.network.ThisHost.ID()] -= givenAction.DataF
-				gm.state.BetHistory[gm.network.ThisHost.ID()] += givenAction.DataF
+				// Update state and GUI locally
+				gm.state.PlayerBet(gm.network.ThisHost.ID(), givenAction.DataF)
 
-				// Update GUI locally
-				channelmanager.TGUI_PotChan <- gm.state.GetCurrentPot()
-				channelmanager.TGUI_PlayerInfo <- gm.state.GetPlayerInfo()
+				fmt.Println("Updated GUI")
 
-				// Send newly updated state to the network for processing
-				//channelmanager.TFNET_GameStateChan <- gm.state
-				//gm.network.ExecuteCommand(&p2p.RaiseCommand{}) // Update peers about raise
+				// Send to others
+				gm.network.ExecuteCommand(&p2p.RaiseCommand{}) // Update peers about raise
+
+				fmt.Println("Command sent")
 			case "Fold":
 				// Handle fold action
 				fmt.Println("Handling Fold action")

@@ -14,10 +14,12 @@ import (
 type GameState struct {
 	// Gamestate mutex due to the network and gamemanager using the same state
 	mu sync.Mutex
+	Me peer.ID
 	// Handled by network (built dynamically and 'should be' signed by all peers for validity)
 	// On peer connection
 	Players    map[peer.ID]string  // Player nicknames tied to their peer.ID
 	BetHistory map[peer.ID]float64 // A map to store bets placed on the current round
+	LastBet    float64             // Holds the last bet played (will be passed around for raising and possibly calling)
 
 	// On play being pressed
 	PlayersMoney map[peer.ID]float64 // Players money by peer ID
@@ -160,15 +162,19 @@ func (gs *GameState) GetPlayerInfo() channelmanager.PlayerInfo {
 
 	var players []string
 	var money []float64
+	var me string
 	for i := 0; i < len(gs.TurnOrder); i++ { // We disregard any 'exists' stuff as by this point we have already locked in everyone
 		peerID, _ := gs.TurnOrder[i]
 		peerNickname, _ := gs.Players[peerID]
 		peerMoney, _ := gs.PlayersMoney[peerID]
 		players = append(players, peerNickname)
 		money = append(money, peerMoney)
+		if peerID == gs.Me {
+			me = peerNickname
+		}
 	}
 
-	return channelmanager.PlayerInfo{Players: players, Money: money}
+	return channelmanager.PlayerInfo{Players: players, Money: money, Me: me}
 }
 
 // Package up the table rules to be sent to others
@@ -213,6 +219,26 @@ func (gs *GameState) GetTurnOrder() []peer.ID {
 	}
 
 	return ids
+}
+
+// Update state based on players bet
+func (gs *GameState) PlayerBet(peerID peer.ID, bet float64) {
+	gs.mu.Lock()
+
+	gs.LastBet = bet
+	gs.PlayersMoney[peerID] -= bet
+	gs.BetHistory[peerID] += bet
+
+	gs.mu.Unlock()
+
+	channelmanager.TGUI_PotChan <- gs.GetCurrentPot()    // Updates the pot
+	channelmanager.TGUI_PlayerInfo <- gs.GetPlayerInfo() // Updates the cards
+}
+
+func (gs *GameState) GetLastBet() float64 {
+	gs.mu.Lock()
+	defer gs.mu.Unlock()
+	return gs.LastBet
 }
 
 func (gs *GameState) DumpState() {

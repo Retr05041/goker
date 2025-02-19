@@ -22,7 +22,8 @@ var (
 
 	playerCards = container.NewVBox()
 
-	moneyLabel = widget.NewLabel(fmt.Sprintf("My Money: $%.0f", 0.0))
+	myMoney    = 0.0
+	moneyLabel = widget.NewLabel(fmt.Sprintf("My Money: $%.0f", myMoney))
 	valueLabel = widget.NewLabel(fmt.Sprintf("$%.0f", 0.0))
 	betSlider  = widget.NewSlider(0, 100)
 	potLabel   = widget.NewLabel(fmt.Sprintf("Pot: $%.0f", 0.0))

@@ -86,7 +86,9 @@ func showGameScreen(givenWindow fyne.Window) {
 		channelmanager.FGUI_ActionChan <- channelmanager.ActionType{Action: "Fold"}
 	})
 	raiseButton := widget.NewButton("Raise", func() {
-		channelmanager.FGUI_ActionChan <- channelmanager.ActionType{Action: "Raise", DataF: betSlider.Value}
+		if betSlider.Value <= myMoney {
+			channelmanager.FGUI_ActionChan <- channelmanager.ActionType{Action: "Raise", DataF: betSlider.Value}
+		}
 	})
 	callButton := widget.NewButton("Call", func() {
 		channelmanager.FGUI_ActionChan <- channelmanager.ActionType{Action: "Call"}

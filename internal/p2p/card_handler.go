@@ -275,7 +275,7 @@ func (p *GokerPeer) DecryptMyHand(cardOneKeys []string, cardTwoKeys []string) {
 
 // Load images for my hand and send them to GUI
 func (p *GokerPeer) sendHandToGUI(cardOneName, cardTwoName string) {
-	log.Printf("Sending cards to GUI: %s, %s\n", cardOneName, cardTwoName)
+	log.Printf("sendHandToGUI: Sending cards to GUI: %s, %s\n", cardOneName, cardTwoName)
 	cardOne := canvas.NewImageFromFile("media/svg_playing_cards/fronts/png_96_dpi/" + cardOneName + ".png")
 	cardOne.FillMode = canvas.ImageFillOriginal
 

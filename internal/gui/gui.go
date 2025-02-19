@@ -85,7 +85,6 @@ func updateBoardImages(board []*canvas.Image) {
 }
 
 func updatePot(pot float64) {
-
 	potLabel.SetText(fmt.Sprintf("Pot: %.0f", pot))
 	potLabel.Refresh()
 }
@@ -104,7 +103,14 @@ func updateCards(playerInfo channelmanager.PlayerInfo) {
 	playerCards.Objects = nil
 
 	for playerIndex, playerNickname := range playerInfo.Players {
-		newCard := widget.NewCard(playerNickname, fmt.Sprintf("$%.0f", playerInfo.Money[playerIndex]), nil)
+		newCard := new(widget.Card)
+		if playerNickname == playerInfo.Me {
+			myMoney = playerInfo.Money[playerIndex]
+			fmt.Println(myMoney)
+			newCard = widget.NewCard(playerNickname, fmt.Sprintf("$%.0f", myMoney), nil)
+		} else {
+			newCard = widget.NewCard(playerNickname, fmt.Sprintf("$%.0f", playerInfo.Money[playerIndex]), nil)
+		}
 		playerCards.Add(newCard)
 	}
 

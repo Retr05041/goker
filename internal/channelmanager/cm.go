@@ -14,9 +14,9 @@ var (
 	TGUI_HandChan    chan []*canvas.Image // Current hand images
 	TGUI_BoardChan   chan []*canvas.Image // Current board images
 
-	TGUI_PotChan      chan float64 // Pot
+	TGUI_PotChan    chan float64 // Pot
 	TGUI_PlayerInfo chan PlayerInfo
-	TGUI_StartRound   chan struct{} // For telling the GUI to start the round
+	TGUI_StartRound chan struct{} // For telling the GUI to start the round
 
 	// Channles for network (<- Network)
 	FNET_NetActionDoneChan chan struct{}
@@ -39,7 +39,8 @@ type ActionType struct {
 // Player info for the GUI to use - sent from the game manager
 type PlayerInfo struct {
 	Players []string
-	Money []float64
+	Money   []float64
+	Me      string
 }
 
 // Initialize all channels

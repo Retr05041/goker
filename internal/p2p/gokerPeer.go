@@ -62,6 +62,7 @@ func (p *GokerPeer) Init(nickname string, hosting bool, givenAddr string, givenS
 	p.ThisHost = h
 	// Add host to state
 	p.gameState.AddPeerToState(p.ThisHost.ID(), nickname)
+	p.gameState.Me = p.ThisHost.ID()
 	// Set stream handler for this peer
 	h.SetStreamHandler(protocolID, p.handleStream)
 
