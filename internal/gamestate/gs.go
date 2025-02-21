@@ -18,8 +18,9 @@ type GameState struct {
 	// Handled by network (built dynamically and 'should be' signed by all peers for validity)
 	// On peer connection
 	Players    map[peer.ID]string  // Player nicknames tied to their peer.ID
-	BetHistory map[peer.ID]float64 // A map to store bets placed on the current round
-	LastBet    float64             // Holds the last bet played (will be passed around for raising and possibly calling)
+	BetHistory map[peer.ID]float64 // Bets made during this round
+	PhaseBets  map[peer.ID]float64 // Bets made during this phase
+	MylastBet  float64
 
 	// On play being pressed
 	PlayersMoney map[peer.ID]float64 // Players money by peer ID
@@ -163,10 +164,11 @@ func (gs *GameState) GetPlayerInfo() channelmanager.PlayerInfo {
 	var players []string
 	var money []float64
 	var me string
+
 	for i := 0; i < len(gs.TurnOrder); i++ { // We disregard any 'exists' stuff as by this point we have already locked in everyone
-		peerID, _ := gs.TurnOrder[i]
-		peerNickname, _ := gs.Players[peerID]
-		peerMoney, _ := gs.PlayersMoney[peerID]
+		peerID := gs.TurnOrder[i]
+		peerNickname := gs.Players[peerID]
+		peerMoney := gs.PlayersMoney[peerID]
 		players = append(players, peerNickname)
 		money = append(money, peerMoney)
 		if peerID == gs.Me {
@@ -174,7 +176,17 @@ func (gs *GameState) GetPlayerInfo() channelmanager.PlayerInfo {
 		}
 	}
 
-	return channelmanager.PlayerInfo{Players: players, Money: money, Me: me}
+	return channelmanager.PlayerInfo{Players: players, Money: money, Me: me, HighestBet: gs.GetHighestbetThisPhase()}
+}
+
+func (gs *GameState) GetHighestbetThisPhase() float64 {
+	highestBet := 0.0
+	for peerID := range gs.Players {
+		if highestBet < gs.PhaseBets[peerID] {
+			highestBet = gs.PhaseBets[peerID]
+		}
+	}
+	return highestBet
 }
 
 // Package up the table rules to be sent to others
@@ -225,9 +237,10 @@ func (gs *GameState) GetTurnOrder() []peer.ID {
 func (gs *GameState) PlayerBet(peerID peer.ID, bet float64) {
 	gs.mu.Lock()
 
-	gs.LastBet = bet
-	gs.PlayersMoney[peerID] -= bet
-	gs.BetHistory[peerID] += bet
+	gs.PlayersMoney[peerID] -= bet // Lower players money
+	gs.BetHistory[peerID] += bet   // Update the best history for the round
+	gs.PhaseBets[peerID] += bet
+	gs.MylastBet = bet
 
 	gs.mu.Unlock()
 
@@ -235,46 +248,6 @@ func (gs *GameState) PlayerBet(peerID peer.ID, bet float64) {
 	channelmanager.TGUI_PlayerInfo <- gs.GetPlayerInfo() // Updates the cards
 }
 
-func (gs *GameState) GetLastBet() float64 {
-	gs.mu.Lock()
-	defer gs.mu.Unlock()
-	return gs.LastBet
-}
-
-func (gs *GameState) DumpState() {
-	fmt.Println("DUMPING STATE")
-	fmt.Println("---------------------------------")
-	log.Print("Players: ")
-	for id, val := range gs.Players {
-		fmt.Println(id.String() + ", " + val)
-	}
-	fmt.Println("---------")
-	log.Print("PlayersMoney: ")
-	for id, val := range gs.PlayersMoney {
-		fmt.Printf("%s, %.1f\n", id, val)
-
-	}
-	fmt.Println("---------")
-	log.Print("BetHistory: ")
-	for id, val := range gs.BetHistory {
-		fmt.Printf("%s, %.1f\n", id, val)
-
-	}
-	fmt.Println("---------")
-	log.Print("TurnOrder: ")
-	for i := 0; i < len(gs.TurnOrder); i++ {
-		id, _ := gs.TurnOrder[i]
-		fmt.Printf("%d. %s\n", i, id.String())
-	}
-	fmt.Println("---------")
-	log.Printf("WhosTurn: %d", gs.WhosTurn)
-	fmt.Println("---------")
-	log.Printf("StartingCash: %.1f", gs.StartingCash)
-	fmt.Println("---------")
-	log.Printf("Pot: %.1f", gs.GetCurrentPot())
-	fmt.Println("---------")
-	log.Printf("MineBet: %.1f", gs.MinBet)
-	fmt.Println("---------")
-	log.Printf("Phase: %s", gs.Phase)
-	fmt.Println("--------------------------------")
+func (gs *GameState) PlayerCall(peerID peer.ID) {
+	gs.PlayerBet(peerID, gs.GetHighestbetThisPhase())
 }

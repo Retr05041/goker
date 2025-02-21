@@ -38,9 +38,10 @@ type ActionType struct {
 
 // Player info for the GUI to use - sent from the game manager
 type PlayerInfo struct {
-	Players []string
-	Money   []float64
-	Me      string
+	Players    []string
+	Money      []float64
+	Me         string
+	HighestBet float64 // So we can check raise and call stuff
 }
 
 // Initialize all channels

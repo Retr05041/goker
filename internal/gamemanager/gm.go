@@ -48,6 +48,7 @@ func (gm *GameManager) listenForActions() {
 				gm.state.Players = make(map[peer.ID]string)
 				gm.state.PlayersMoney = make(map[peer.ID]float64)
 				gm.state.BetHistory = make(map[peer.ID]float64)
+				gm.state.PhaseBets = make(map[peer.ID]float64)
 				gm.state.TurnOrder = make(map[int]peer.ID)
 
 				if len(givenAction.DataS) == 1 {
@@ -94,7 +95,8 @@ func (gm *GameManager) listenForActions() {
 			case "Call":
 				// Handle call action
 				fmt.Println("Handling Call action")
-				// Update state accordingly
+				// Update the state and GUI localy
+				gm.state.PlayerCall(gm.network.ThisHost.ID())
 			case "Check":
 				// Handle call action
 				fmt.Println("Handling Call action")

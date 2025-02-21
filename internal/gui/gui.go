@@ -60,7 +60,7 @@ func gmListener(window fyne.Window) {
 			updateAddress(address)
 		case playerInfo := <-channelmanager.TGUI_PlayerInfo:
 			updateCards(playerInfo)
-		case _ = <-channelmanager.TGUI_StartRound:
+		case <-channelmanager.TGUI_StartRound:
 			showGameScreen(window)
 		}
 	}
@@ -102,11 +102,12 @@ func updateAddress(addresses []string) {
 func updateCards(playerInfo channelmanager.PlayerInfo) {
 	playerCards.Objects = nil
 
+	highestBet = playerInfo.HighestBet
+
 	for playerIndex, playerNickname := range playerInfo.Players {
 		newCard := new(widget.Card)
 		if playerNickname == playerInfo.Me {
 			myMoney = playerInfo.Money[playerIndex]
-			fmt.Println(myMoney)
 			newCard = widget.NewCard(playerNickname, fmt.Sprintf("$%.0f", myMoney), nil)
 		} else {
 			newCard = widget.NewCard(playerNickname, fmt.Sprintf("$%.0f", playerInfo.Money[playerIndex]), nil)
