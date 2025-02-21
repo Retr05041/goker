@@ -70,9 +70,11 @@ func (gm *GameManager) listenForActions() {
 				gm.network.Keyring.GenerateKeys()
 
 				// Setup deck
-				gm.network.ExecuteCommand(&p2p.SendPQCommand{})             // Send everyone the generated P and Q so they can setup their Keyring
-				gm.network.ExecuteCommand(&p2p.ProtocolFirstStepCommand{})  // Setting up deck pt.1
+				gm.network.ExecuteCommand(&p2p.SendPQCommand{})            // Send everyone the generated P and Q so they can setup their Keyring
+				gm.network.ExecuteCommand(&p2p.ProtocolFirstStepCommand{}) // Setting up deck pt.1
+				gm.network.ExecuteCommand(&p2p.BroadcastNewDeck{})
 				gm.network.ExecuteCommand(&p2p.ProtocolSecondStepCommand{}) // Setting up deck pt.2 & Sets everyones hands
+				gm.network.ExecuteCommand(&p2p.BroadcastDeck{})
 
 				// Setup hands
 				gm.network.ExecuteCommand(&p2p.CanRequestHand{})     // Tell everyone they can request their keys now
@@ -85,20 +87,10 @@ func (gm *GameManager) listenForActions() {
 			case "Raise":
 				// Handle raise action
 				fmt.Println("Handling Raise action")
-
 				// Update state and GUI locally
 				gm.state.PlayerBet(gm.network.ThisHost.ID(), givenAction.DataF)
-
-				fmt.Println("Updated GUI")
-
 				// Send to others
 				gm.network.ExecuteCommand(&p2p.RaiseCommand{}) // Update peers about raise
-
-				fmt.Println("Command sent")
-			case "Fold":
-				// Handle fold action
-				fmt.Println("Handling Fold action")
-				// Update state accordingly
 			case "Call":
 				// Handle call action
 				fmt.Println("Handling Call action")
@@ -106,6 +98,10 @@ func (gm *GameManager) listenForActions() {
 			case "Check":
 				// Handle call action
 				fmt.Println("Handling Call action")
+				// Update state accordingly
+			case "Fold":
+				// Handle fold action
+				fmt.Println("Handling Fold action")
 				// Update state accordingly
 			}
 		}

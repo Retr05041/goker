@@ -376,6 +376,7 @@ func (sp *ProtocolFirstStepCommand) Execute(p *GokerPeer) {
 	p.Deck.ShuffleRoundDeck()
 
 	p.peerListMutex.Lock()
+	defer p.peerListMutex.Unlock()
 
 	// So I don't have to set the deck each turn
 	command := NetworkCommand{
@@ -414,8 +415,7 @@ func (sp *ProtocolFirstStepCommand) Execute(p *GokerPeer) {
 	}
 
 	p.Deck.SetNewDeck(command.Payload.(string)) // Set the final deck for host
-	log.Println("ProtocolFirstStepCommand: All peers have contributed, broadcasting new deck...")
-	p.ExecuteCommand(&BroadcastNewDeck{})
+	log.Println("ProtocolFirstStepCommand: All peers have contributed, continueing...")
 }
 
 // Respond to a protocol's first command - Encrypt with global keys, shuffle, then send back - when this is called a new deck should be set already
@@ -438,6 +438,7 @@ func (sp *ProtocolFirstStepCommand) Respond(peer *GokerPeer, sendingStream netwo
 type BroadcastNewDeck struct{}
 
 func (b *BroadcastNewDeck) Execute(p *GokerPeer) {
+	p.peerListMutex.Lock()
 	defer p.peerListMutex.Unlock() // Since this is called RIGHT after the first round of the protocol is done, it can unlock the peerlist
 
 	var wg sync.WaitGroup
@@ -508,6 +509,7 @@ type ProtocolSecondStepCommand struct{}
 // For getting others to encrypt with their variation keys
 func (sp *ProtocolSecondStepCommand) Execute(p *GokerPeer) {
 	p.peerListMutex.Lock() // Same thing as first step, the broadcast will unlock the mutex
+	defer p.peerListMutex.Unlock()
 
 	// First, the host of the game (the one initialing the protocols steps) will encrypt with variations
 	p.DecryptAllWithGlobalKeys() // Decrypt global keys
@@ -550,8 +552,7 @@ func (sp *ProtocolSecondStepCommand) Execute(p *GokerPeer) {
 
 	p.Deck.SetDeckInPlace(command.Payload.(string))
 	p.SetHands() // Now that the new deck is in place, we can set hands
-	log.Println("ProtocolSecondStepCommand: All peers have contributed, broadcasting deck...")
-	p.ExecuteCommand(&BroadcastDeck{})
+	log.Println("ProtocolSecondStepCommand: All peers have contributed, continueing...")
 }
 
 // Respond to the protocols second command - Decrypt global keys, encrypt with variation, then send back- when this is called a new deck should be set already
@@ -573,6 +574,7 @@ func (sp *ProtocolSecondStepCommand) Respond(peer *GokerPeer, sendingStream netw
 type BroadcastDeck struct{}
 
 func (b *BroadcastDeck) Execute(p *GokerPeer) {
+	p.peerListMutex.Lock()
 	defer p.peerListMutex.Unlock()
 
 	var wg sync.WaitGroup
@@ -732,8 +734,6 @@ func (rh *RequestHandCommand) Execute(peer *GokerPeer) {
 
 func (rh *RequestHandCommand) Respond(peer *GokerPeer, sendingStream network.Stream) {
 	payload := peer.GetKeyPayloadForPlayersHand(sendingStream.Conn().RemotePeer())
-	fmt.Println("SENDING KEYS")
-	fmt.Println(payload)
 	response := NetworkCommand{
 		Command: "RequestHand",
 		Payload: payload,
