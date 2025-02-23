@@ -54,7 +54,7 @@ func (gs *GameState) FreshState(startingCash *float64, minBet *float64) {
 	}
 
 	gs.Phase = "preflop"
-	gs.WhosTurn = 1 // left of the dealer, aka the host for the first round
+	gs.WhosTurn = 0
 }
 
 // Function used by network for setting table rules from host
@@ -128,13 +128,9 @@ func (gs *GameState) SetTurnOrder(IDs []peer.ID) {
 		return
 	}
 
-	hostID := IDs[0]
-
-	for i := 1; i < len(IDs); i++ {
-		gs.TurnOrder[i-1] = IDs[i]
+	for i := 0; i < len(IDs); i++ {
+		gs.TurnOrder[i] = IDs[i]
 	}
-
-	gs.TurnOrder[len(IDs)-1] = hostID
 }
 
 // Check if a player exists
@@ -164,6 +160,7 @@ func (gs *GameState) GetPlayerInfo() channelmanager.PlayerInfo {
 	var players []string
 	var money []float64
 	var me string
+	var whosTurn string
 
 	for i := 0; i < len(gs.TurnOrder); i++ { // We disregard any 'exists' stuff as by this point we have already locked in everyone
 		peerID := gs.TurnOrder[i]
@@ -174,9 +171,12 @@ func (gs *GameState) GetPlayerInfo() channelmanager.PlayerInfo {
 		if peerID == gs.Me {
 			me = peerNickname
 		}
+		if i == gs.WhosTurn {
+			whosTurn = peerNickname
+		}
 	}
 
-	return channelmanager.PlayerInfo{Players: players, Money: money, Me: me, HighestBet: gs.GetHighestbetThisPhase()}
+	return channelmanager.PlayerInfo{Players: players, Money: money, Me: me, HighestBet: gs.GetHighestbetThisPhase(), WhosTurn: whosTurn}
 }
 
 func (gs *GameState) GetHighestbetThisPhase() float64 {
@@ -236,18 +236,25 @@ func (gs *GameState) GetTurnOrder() []peer.ID {
 // Update state based on players bet
 func (gs *GameState) PlayerBet(peerID peer.ID, bet float64) {
 	gs.mu.Lock()
-
 	gs.PlayersMoney[peerID] -= bet // Lower players money
 	gs.BetHistory[peerID] += bet   // Update the best history for the round
 	gs.PhaseBets[peerID] += bet
 	gs.MylastBet = bet
-
 	gs.mu.Unlock()
+}
+
+func (gs *GameState) PlayerCall(peerID peer.ID) {
+	gs.PlayerBet(peerID, gs.GetHighestbetThisPhase())
+}
+
+func (gs *GameState) NextTurn() {
+	// Wrap around using modulus.
+	gs.WhosTurn = (gs.WhosTurn + 1) % len(gs.Players)
 
 	channelmanager.TGUI_PotChan <- gs.GetCurrentPot()    // Updates the pot
 	channelmanager.TGUI_PlayerInfo <- gs.GetPlayerInfo() // Updates the cards
 }
 
-func (gs *GameState) PlayerCall(peerID peer.ID) {
-	gs.PlayerBet(peerID, gs.GetHighestbetThisPhase())
+func (gs *GameState) IsMyTurn() bool {
+	return gs.Me == gs.TurnOrder[gs.WhosTurn]
 }

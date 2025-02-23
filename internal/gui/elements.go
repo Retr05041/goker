@@ -2,6 +2,7 @@ package gui
 
 import (
 	"fmt"
+	"goker/internal/channelmanager"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
@@ -15,10 +16,14 @@ var (
 	lanAddress      string
 
 	// Game
-	boardSize = fyne.NewSize((234*5)/2, 333/2)   // 234x333 per card
-	handSize  = fyne.NewSize((234*2)/2, 333/2)   // 234x333
-	handGrid  = container.NewGridWrap(handSize)  // Holds the hand images
-	boardGrid = container.NewGridWrap(boardSize) // Holds the hand images
+	boardSize   = fyne.NewSize((234*5)/2, 333/2)   // 234x333 per card
+	handSize    = fyne.NewSize((234*2)/2, 333/2)   // 234x333
+	handGrid    = container.NewGridWrap(handSize)  // Holds the hand images
+	boardGrid   = container.NewGridWrap(boardSize) // Holds the hand images
+	foldButton  *widget.Button
+	raiseButton *widget.Button
+	callButton  *widget.Button
+	checkButton *widget.Button
 
 	playerCards = container.NewVBox()
 
@@ -35,4 +40,20 @@ func initElements() {
 		valueLabel.SetText(fmt.Sprintf("$%.0f", f))
 	}
 
+	foldButton = widget.NewButton("Fold", func() {
+		channelmanager.FGUI_ActionChan <- channelmanager.ActionType{Action: "Fold"}
+	})
+	raiseButton = widget.NewButton("Raise", func() {
+		if (betSlider.Value <= myMoney) && (betSlider.Value > highestBet) {
+			channelmanager.FGUI_ActionChan <- channelmanager.ActionType{Action: "Raise", DataF: betSlider.Value}
+		}
+	})
+	callButton = widget.NewButton("Call", func() {
+		if highestBet <= myMoney {
+			channelmanager.FGUI_ActionChan <- channelmanager.ActionType{Action: "Call"}
+		}
+	})
+	checkButton = widget.NewButton("Check", func() {
+		channelmanager.FGUI_ActionChan <- channelmanager.ActionType{Action: "Check"}
+	})
 }

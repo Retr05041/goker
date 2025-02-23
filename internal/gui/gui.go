@@ -9,7 +9,6 @@ import (
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
-	"fyne.io/fyne/v2/widget"
 )
 
 var (
@@ -59,6 +58,7 @@ func gmListener(window fyne.Window) {
 		case address := <-channelmanager.TGUI_AddressChan:
 			updateAddress(address)
 		case playerInfo := <-channelmanager.TGUI_PlayerInfo:
+			window.SetTitle("Goker - " + playerInfo.Me)
 			updateCards(playerInfo)
 		case <-channelmanager.TGUI_StartRound:
 			showGameScreen(window)
@@ -104,16 +104,43 @@ func updateCards(playerInfo channelmanager.PlayerInfo) {
 
 	highestBet = playerInfo.HighestBet
 
-	for playerIndex, playerNickname := range playerInfo.Players {
-		newCard := new(widget.Card)
-		if playerNickname == playerInfo.Me {
-			myMoney = playerInfo.Money[playerIndex]
-			newCard = widget.NewCard(playerNickname, fmt.Sprintf("$%.0f", myMoney), nil)
-		} else {
-			newCard = widget.NewCard(playerNickname, fmt.Sprintf("$%.0f", playerInfo.Money[playerIndex]), nil)
-		}
-		playerCards.Add(newCard)
+	if playerInfo.Me == playerInfo.WhosTurn {
+		foldButton.Enable()
+		raiseButton.Enable()
+		callButton.Enable()
+		checkButton.Enable()
+	} else {
+		foldButton.Disable()
+		raiseButton.Disable()
+		callButton.Disable()
+		checkButton.Disable()
 	}
 
+	for playerIndex, playerNickname := range playerInfo.Players {
+		if playerNickname == playerInfo.Me {
+			myMoney = playerInfo.Money[playerIndex]
+		}
+
+		var titleText *canvas.Text
+		if playerNickname == playerInfo.WhosTurn {
+			titleText = canvas.NewText(playerNickname, BLUE)
+
+		} else {
+			titleText = canvas.NewText(playerNickname, color.White)
+		}
+		titleText.TextSize = 18
+		titleText.TextStyle.Bold = true
+
+		moneyText := canvas.NewText(fmt.Sprintf("$%.0f", playerInfo.Money[playerIndex]), color.White)
+		moneyText.TextSize = 16
+		moneyText.TextStyle.Bold = true
+
+		card := container.NewVBox(
+			titleText,
+			moneyText,
+		)
+
+		playerCards.Add(card)
+	}
 	playerCards.Refresh()
 }

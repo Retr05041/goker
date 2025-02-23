@@ -42,6 +42,7 @@ type PlayerInfo struct {
 	Money      []float64
 	Me         string
 	HighestBet float64 // So we can check raise and call stuff
+	WhosTurn   string  // the nickname
 }
 
 // Initialize all channels

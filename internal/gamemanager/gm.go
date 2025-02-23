@@ -86,24 +86,49 @@ func (gm *GameManager) listenForActions() {
 
 				gm.network.ExecuteCommand(&p2p.MoveToTableCommand{}) // Tell everyone to move to the game table
 			case "Raise":
+				if !gm.state.IsMyTurn() {
+					fmt.Println("Not your turn yet!")
+					continue // NO BREAKING
+				}
 				// Handle raise action
 				fmt.Println("Handling Raise action")
-				// Update state and GUI locally
+				// Update state
 				gm.state.PlayerBet(gm.network.ThisHost.ID(), givenAction.DataF)
 				// Send to others
-				gm.network.ExecuteCommand(&p2p.RaiseCommand{}) // Update peers about raise
+				gm.network.ExecuteCommand(&p2p.RaiseCommand{})
+				// Update GUI
+				gm.state.NextTurn()
 			case "Call":
+				if !gm.state.IsMyTurn() {
+					fmt.Println("Not your turn yet!")
+					continue
+				}
 				// Handle call action
 				fmt.Println("Handling Call action")
-				// Update the state and GUI localy
+				// Update state
 				gm.state.PlayerCall(gm.network.ThisHost.ID())
+				// Others
+				//gm.network.ExecuteCommand(&p2p.CallCommand{})
+				// Update GUI
+				gm.state.NextTurn()
 			case "Check":
+				if !gm.state.IsMyTurn() {
+					fmt.Println("Not your turn yet!")
+					continue
+				}
 				// Handle call action
-				fmt.Println("Handling Call action")
-				// Update state accordingly
+				fmt.Println("Handling Check action")
+				// Others
+				//gm.network.ExecuteCommand(&p2p.CheckCommand{})
+				gm.state.NextTurn() // SKip your turn for now
 			case "Fold":
+				if !gm.state.IsMyTurn() {
+					fmt.Println("Not your turn yet!")
+					continue
+				}
 				// Handle fold action
 				fmt.Println("Handling Fold action")
+				//gm.network.ExecuteCommand(&p2p.FoldCommand{})
 				// Update state accordingly
 			}
 		}

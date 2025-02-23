@@ -108,6 +108,7 @@ func (p *GokerPeer) handleStream(stream network.Stream) {
 		channelmanager.TGUI_StartRound <- struct{}{} // Tell GUI to move to the table UI
 	case "Raise":
 		p.gameState.PlayerBet(stream.Conn().RemotePeer(), nCmd.Payload.(float64))
+		p.gameState.NextTurn()
 		p.RespondToCommand(&RaiseCommand{}, stream)
 	default:
 		log.Printf("Unknown Command Recieved: %s\n", nCmd.Command)
