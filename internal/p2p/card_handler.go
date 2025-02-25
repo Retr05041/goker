@@ -57,14 +57,12 @@ func VerifyCardHash(card string, secretKey string, hash *big.Int) bool {
 func (d *deckInfo) GenerateRefDeck(key string) {
 	newRefDeck := make(map[string]*big.Int, 52)
 
-	count := 0
 	for _, suit := range suits {
 		for _, rank := range ranks {
 			cardName := suit + "_" + rank
 			cardHash := generateCardHash(cardName, key)
 
 			newRefDeck[cardName] = cardHash
-			count++
 		}
 	}
 	d.ReferenceDeck = newRefDeck
@@ -104,12 +102,10 @@ func (d *deckInfo) GetCardFromRefDeck(cardHash *big.Int) (key string, ok bool) {
 }
 
 func (d *deckInfo) GetCardFromRoundDeck(cardIndex int) *CardInfo {
-	for i, v := range d.RoundDeck {
-		if i == cardIndex {
-			return &v
-		}
+	if cardIndex < 0 || cardIndex >= len(d.RoundDeck) {
+		return nil
 	}
-	return nil
+	return &d.RoundDeck[cardIndex]
 }
 
 // Creates a payload to be sent to anther peer
@@ -126,9 +122,6 @@ func (d *deckInfo) GenerateDeckPayload() string {
 func (d *deckInfo) SetNewDeck(payload string) {
 	var newDeck []CardInfo
 	for i, line := range strings.Split(payload, "\n") {
-		if line == "\\END" {
-			break
-		}
 		card, success := new(big.Int).SetString(line, 10)
 		if !success {
 			log.Printf("SetDeck: Failed to parse card value: %s", line)
@@ -141,9 +134,6 @@ func (d *deckInfo) SetNewDeck(payload string) {
 
 func (d *deckInfo) SetDeckInPlace(payload string) {
 	for i, line := range strings.Split(payload, "\n") {
-		if line == "\\END" {
-			break
-		}
 		card, success := new(big.Int).SetString(line, 10)
 		if !success {
 			log.Printf("SetDeck: Failed to parse card value: %s", line)
@@ -155,15 +145,15 @@ func (d *deckInfo) SetDeckInPlace(payload string) {
 
 // Decrypt deck with global keys
 func (p *GokerPeer) DecryptAllWithGlobalKeys() {
-	for _, card := range p.Deck.RoundDeck {
-		card.CardValue = p.Keyring.DecryptWithGlobalKeys(card.CardValue)
+	for i := range p.Deck.RoundDeck {
+		p.Deck.RoundDeck[i].CardValue = p.Keyring.DecryptWithGlobalKeys(p.Deck.RoundDeck[i].CardValue)
 	}
 }
 
 // Encrypt deck with global keys
 func (p *GokerPeer) EncryptAllWithGlobalKeys() {
-	for _, card := range p.Deck.RoundDeck {
-		card.CardValue = p.Keyring.EncryptWithGlobalKeys(card.CardValue)
+	for i := range p.Deck.RoundDeck {
+		p.Deck.RoundDeck[i].CardValue = p.Keyring.EncryptWithGlobalKeys(p.Deck.RoundDeck[i].CardValue)
 	}
 }
 
