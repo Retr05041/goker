@@ -110,6 +110,17 @@ func (p *GokerPeer) handleStream(stream network.Stream) {
 		p.gameState.PlayerBet(stream.Conn().RemotePeer(), nCmd.Payload.(float64))
 		p.gameState.NextTurn()
 		p.RespondToCommand(&RaiseCommand{}, stream)
+	case "Fold":
+		p.gameState.PlayerFold(stream.Conn().RemotePeer())
+		p.gameState.NextTurn()
+		p.RespondToCommand(&FoldCommand{}, stream)
+	case "Call":
+		p.gameState.PlayerCall(stream.Conn().RemotePeer())
+		p.gameState.NextTurn()
+		p.RespondToCommand(&CallCommand{}, stream)
+	case "Check":
+		p.gameState.NextTurn()
+		p.RespondToCommand(&CheckCommand{}, stream)
 	default:
 		log.Printf("Unknown Command Recieved: %s\n", nCmd.Command)
 	}
@@ -735,6 +746,7 @@ func (rh *RequestHandCommand) Execute(peer *GokerPeer) {
 
 func (rh *RequestHandCommand) Respond(peer *GokerPeer, sendingStream network.Stream) {
 	payload := peer.GetKeyPayloadForPlayersHand(sendingStream.Conn().RemotePeer())
+	fmt.Println("SENDING KEYS: " + payload)
 	response := NetworkCommand{
 		Command: "RequestHand",
 		Payload: payload,
@@ -835,6 +847,162 @@ func (r *RaiseCommand) Respond(p *GokerPeer, sendingStream network.Stream) {
 	}
 }
 
-type CheckCommand struct{}
-type CallCommand struct{}
 type FoldCommand struct{}
+
+func (f *FoldCommand) Execute(p *GokerPeer) {
+	p.peerListMutex.Lock()
+	defer p.peerListMutex.Unlock()
+
+	command := NetworkCommand{
+		Command: "Fold",
+	}
+
+	for _, peerInfo := range p.peerList {
+		if peerInfo.ID == p.ThisHost.ID() {
+			continue
+		}
+
+		stream, err := p.ThisHost.NewStream(context.Background(), peerInfo.ID, protocolID)
+		if err != nil {
+			log.Printf("Fold: failed to create stream to host %s: %v\n", peerInfo.ID, err)
+			return
+		}
+		defer stream.Close()
+
+		if err := sendCommand(stream, command); err != nil {
+			log.Fatalf("Fold: failed to send command to peer %s: %v", peerInfo.ID, err)
+		}
+
+		response, err := receiveResponse(stream)
+		if err != nil {
+			log.Fatalf("Fold: failed to recieve a response from peer: %s: %v", peerInfo.ID, err)
+		}
+
+		approved, ok := response.Payload.(string)
+		if !ok {
+			log.Fatalf("Fold: invalid response format: expected string, got %T", response.Payload)
+		}
+
+		if approved != "APPROVED" {
+			log.Fatalf("Fold: Raise was not APPROVED, got %s", approved)
+		}
+	}
+}
+
+func (f *FoldCommand) Respond(p *GokerPeer, sendingStream network.Stream) {
+	response := NetworkCommand{
+		Command: "Fold",
+		Payload: "APPROVED",
+	}
+
+	if err := sendCommand(sendingStream, response); err != nil {
+		log.Fatalf("Fold: failed to send 'APPROVED': %v", err)
+	}
+}
+
+type CallCommand struct{}
+
+func (c *CallCommand) Execute(p *GokerPeer) {
+	p.peerListMutex.Lock()
+	defer p.peerListMutex.Unlock()
+
+	command := NetworkCommand{
+		Command: "Call",
+	}
+
+	for _, peerInfo := range p.peerList {
+		if peerInfo.ID == p.ThisHost.ID() {
+			continue
+		}
+
+		stream, err := p.ThisHost.NewStream(context.Background(), peerInfo.ID, protocolID)
+		if err != nil {
+			log.Printf("Call: failed to create stream to host %s: %v\n", peerInfo.ID, err)
+			return
+		}
+		defer stream.Close()
+
+		if err := sendCommand(stream, command); err != nil {
+			log.Fatalf("Call: failed to send command to peer %s: %v", peerInfo.ID, err)
+		}
+
+		response, err := receiveResponse(stream)
+		if err != nil {
+			log.Fatalf("Call: failed to recieve a response from peer: %s: %v", peerInfo.ID, err)
+		}
+
+		approved, ok := response.Payload.(string)
+		if !ok {
+			log.Fatalf("Call: invalid response format: expected string, got %T", response.Payload)
+		}
+
+		if approved != "APPROVED" {
+			log.Fatalf("Call: Raise was not APPROVED, got %s", approved)
+		}
+	}
+}
+
+func (c *CallCommand) Respond(p *GokerPeer, sendingStream network.Stream) {
+	response := NetworkCommand{
+		Command: "Call",
+		Payload: "APPROVED",
+	}
+
+	if err := sendCommand(sendingStream, response); err != nil {
+		log.Fatalf("Call: failed to send 'APPROVED': %v", err)
+	}
+}
+
+type CheckCommand struct{}
+
+func (c *CheckCommand) Execute(p *GokerPeer) {
+	p.peerListMutex.Lock()
+	defer p.peerListMutex.Unlock()
+
+	command := NetworkCommand{
+		Command: "Check",
+	}
+
+	for _, peerInfo := range p.peerList {
+		if peerInfo.ID == p.ThisHost.ID() {
+			continue
+		}
+
+		stream, err := p.ThisHost.NewStream(context.Background(), peerInfo.ID, protocolID)
+		if err != nil {
+			log.Printf("Check: failed to create stream to host %s: %v\n", peerInfo.ID, err)
+			return
+		}
+		defer stream.Close()
+
+		if err := sendCommand(stream, command); err != nil {
+			log.Fatalf("Check: failed to send command to peer %s: %v", peerInfo.ID, err)
+		}
+
+		response, err := receiveResponse(stream)
+		if err != nil {
+			log.Fatalf("Check: failed to recieve a response from peer: %s: %v", peerInfo.ID, err)
+		}
+
+		approved, ok := response.Payload.(string)
+		if !ok {
+			log.Fatalf("Check: invalid response format: expected string, got %T", response.Payload)
+		}
+
+		if approved != "APPROVED" {
+			log.Fatalf("Check: Raise was not APPROVED, got %s", approved)
+		}
+	}
+}
+
+func (c *CheckCommand) Respond(p *GokerPeer, sendingStream network.Stream) {
+	response := NetworkCommand{
+		Command: "Check",
+		Payload: "APPROVED",
+	}
+
+	if err := sendCommand(sendingStream, response); err != nil {
+		log.Fatalf("Check: failed to send 'APPROVED': %v", err)
+	}
+
+}

@@ -15,17 +15,21 @@ type GameState struct {
 	// Gamestate mutex due to the network and gamemanager using the same state
 	mu sync.Mutex
 	Me peer.ID
-	// Handled by network (built dynamically and 'should be' signed by all peers for validity)
-	// On peer connection
-	Players    map[peer.ID]string  // Player nicknames tied to their peer.ID
-	BetHistory map[peer.ID]float64 // Bets made during this round
-	PhaseBets  map[peer.ID]float64 // Bets made during this phase
-	MylastBet  float64
+
+	// Player nicknames tied to their peer.ID - Handled by network
+	Players map[peer.ID]string
+
+	// Bets made during this round
+	BetHistory map[peer.ID]float64
+	// Bets made during this phase
+	PhaseBets map[peer.ID]float64
+	MylastBet float64
 
 	// On play being pressed
-	PlayersMoney map[peer.ID]float64 // Players money by peer ID
-	TurnOrder    map[int]peer.ID     // Handled by network (based off of candidate list)
-	WhosTurn     int
+	PlayersMoney  map[peer.ID]float64 // Players money by peer ID
+	TurnOrder     map[int]peer.ID     // Handled by network (based off of candidate list)
+	WhosTurn      int
+	FoldedPlayers map[peer.ID]bool // Holds who has folded this round
 
 	// Handled by host
 	StartingCash float64 // Starting cash for all players
@@ -84,6 +88,7 @@ func (gs *GameState) AddPeerToState(peerID peer.ID, nickname string) {
 	}
 	gs.Players[peerID] = nickname
 	gs.BetHistory[peerID] = 0.0
+	gs.FoldedPlayers[peerID] = false
 }
 
 func (gs *GameState) RemovePeerFromState(peerID peer.ID) {
@@ -96,8 +101,9 @@ func (gs *GameState) RemovePeerFromState(peerID peer.ID) {
 		return
 	}
 	delete(gs.Players, peerID)
-	// Remove bet history
+
 	delete(gs.BetHistory, peerID)
+	delete(gs.FoldedPlayers, peerID)
 
 	_, exists = gs.PlayersMoney[peerID]
 	if !exists {
@@ -233,7 +239,6 @@ func (gs *GameState) GetTurnOrder() []peer.ID {
 	return ids
 }
 
-// Update state based on players bet
 func (gs *GameState) PlayerBet(peerID peer.ID, bet float64) {
 	gs.mu.Lock()
 	gs.PlayersMoney[peerID] -= bet // Lower players money
@@ -247,9 +252,19 @@ func (gs *GameState) PlayerCall(peerID peer.ID) {
 	gs.PlayerBet(peerID, gs.GetHighestbetThisPhase())
 }
 
+func (gs *GameState) PlayerFold(peerID peer.ID) {
+	gs.FoldedPlayers[peerID] = true
+}
+
 func (gs *GameState) NextTurn() {
-	// Wrap around using modulus.
-	gs.WhosTurn = (gs.WhosTurn + 1) % len(gs.Players)
+	// Modular arithmetic to wrap around
+	nextValidPlayer := (gs.WhosTurn + 1) % len(gs.Players)
+
+	for gs.FoldedPlayers[gs.TurnOrder[nextValidPlayer]] { // Skip all folded players
+		nextValidPlayer = (nextValidPlayer + 1) % len(gs.Players)
+	}
+
+	gs.WhosTurn = nextValidPlayer
 
 	channelmanager.TGUI_PotChan <- gs.GetCurrentPot()    // Updates the pot
 	channelmanager.TGUI_PlayerInfo <- gs.GetPlayerInfo() // Updates the cards

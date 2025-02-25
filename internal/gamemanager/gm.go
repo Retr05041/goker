@@ -50,6 +50,7 @@ func (gm *GameManager) listenForActions() {
 				gm.state.BetHistory = make(map[peer.ID]float64)
 				gm.state.PhaseBets = make(map[peer.ID]float64)
 				gm.state.TurnOrder = make(map[int]peer.ID)
+				gm.state.FoldedPlayers = make(map[peer.ID]bool)
 
 				if len(givenAction.DataS) == 1 {
 					go gm.network.Init(givenAction.DataS[0], true, "", gm.state) // Hosting
@@ -93,7 +94,7 @@ func (gm *GameManager) listenForActions() {
 				// Handle raise action
 				fmt.Println("Handling Raise action")
 				// Update state
-				gm.state.PlayerBet(gm.network.ThisHost.ID(), givenAction.DataF)
+				gm.state.PlayerBet(gm.state.Me, givenAction.DataF)
 				// Send to others
 				gm.network.ExecuteCommand(&p2p.RaiseCommand{})
 				// Update GUI
@@ -106,9 +107,9 @@ func (gm *GameManager) listenForActions() {
 				// Handle call action
 				fmt.Println("Handling Call action")
 				// Update state
-				gm.state.PlayerCall(gm.network.ThisHost.ID())
+				gm.state.PlayerCall(gm.state.Me)
 				// Others
-				//gm.network.ExecuteCommand(&p2p.CallCommand{})
+				gm.network.ExecuteCommand(&p2p.CallCommand{})
 				// Update GUI
 				gm.state.NextTurn()
 			case "Check":
@@ -119,8 +120,8 @@ func (gm *GameManager) listenForActions() {
 				// Handle call action
 				fmt.Println("Handling Check action")
 				// Others
-				//gm.network.ExecuteCommand(&p2p.CheckCommand{})
-				gm.state.NextTurn() // SKip your turn for now
+				gm.network.ExecuteCommand(&p2p.CheckCommand{})
+				gm.state.NextTurn() // Skip your turn for now
 			case "Fold":
 				if !gm.state.IsMyTurn() {
 					fmt.Println("Not your turn yet!")
@@ -128,8 +129,10 @@ func (gm *GameManager) listenForActions() {
 				}
 				// Handle fold action
 				fmt.Println("Handling Fold action")
-				//gm.network.ExecuteCommand(&p2p.FoldCommand{})
-				// Update state accordingly
+				gm.state.PlayerFold(gm.state.Me)              // I fold
+				gm.network.ExecuteCommand(&p2p.FoldCommand{}) // Tell others I have folded
+
+				gm.state.NextTurn() // Move to next person
 			}
 		}
 	}
