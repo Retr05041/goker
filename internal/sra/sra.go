@@ -28,10 +28,12 @@ func (k *Keyring) GeneratePQ() {
 	p, err := generateLargePrime(2048)
 	if err != nil {
 		fmt.Println(err)
+		return
 	}
 	q, err := generateLargePrime(2048)
 	if err != nil {
 		fmt.Println(err)
+		return
 	}
 
 	k.sharedP = p

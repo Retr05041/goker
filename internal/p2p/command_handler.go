@@ -264,9 +264,9 @@ func (it *InitTableCommand) Execute(p *GokerPeer) {
 		go func(peerID peer.ID) {
 			defer wg.Done()
 			// Create a new stream to the peer
-			stream, err := p.ThisHost.NewStream(context.Background(), peerInfo.ID, protocolID)
+			stream, err := p.ThisHost.NewStream(context.Background(), peerID, protocolID)
 			if err != nil {
-				log.Printf("InitTableCommand: Failed to create stream to peer %s: %v\n", peerInfo.ID, err)
+				log.Printf("InitTableCommand: Failed to create stream to peer %s: %v\n", peerID, err)
 			}
 			defer stream.Close()
 
@@ -471,9 +471,9 @@ func (b *BroadcastNewDeck) Execute(p *GokerPeer) {
 		go func(peerID peer.ID) {
 			defer wg.Done()
 
-			stream, err := p.ThisHost.NewStream(context.Background(), peerInfo.ID, protocolID)
+			stream, err := p.ThisHost.NewStream(context.Background(), peerID, protocolID)
 			if err != nil {
-				log.Fatalf("BroadcastNewDeck: failed to setup stream to peer %s: %v\n", peerInfo.ID, err)
+				log.Fatalf("BroadcastNewDeck: failed to setup stream to peer %s: %v\n", peerID, err)
 			}
 			defer stream.Close()
 
@@ -606,9 +606,9 @@ func (b *BroadcastDeck) Execute(p *GokerPeer) {
 		go func(peerID peer.ID) {
 			defer wg.Done()
 
-			stream, err := p.ThisHost.NewStream(context.Background(), peerInfo.ID, protocolID)
+			stream, err := p.ThisHost.NewStream(context.Background(), peerID, protocolID)
 			if err != nil {
-				log.Fatalf("BroadcastDeck: failed to setup stream to peer %s: %v\n", peerInfo.ID, err)
+				log.Fatalf("BroadcastDeck: failed to setup stream to peer %s: %v\n", peerID, err)
 			}
 			defer stream.Close()
 
@@ -884,7 +884,7 @@ func (f *FoldCommand) Execute(p *GokerPeer) {
 		}
 
 		if approved != "APPROVED" {
-			log.Fatalf("Fold: Raise was not APPROVED, got %s", approved)
+			log.Fatalf("Fold: Fold was not APPROVED, got %s", approved)
 		}
 	}
 }
@@ -937,7 +937,7 @@ func (c *CallCommand) Execute(p *GokerPeer) {
 		}
 
 		if approved != "APPROVED" {
-			log.Fatalf("Call: Raise was not APPROVED, got %s", approved)
+			log.Fatalf("Call: Call was not APPROVED, got %s", approved)
 		}
 	}
 }
@@ -990,7 +990,7 @@ func (c *CheckCommand) Execute(p *GokerPeer) {
 		}
 
 		if approved != "APPROVED" {
-			log.Fatalf("Check: Raise was not APPROVED, got %s", approved)
+			log.Fatalf("Check: Check was not APPROVED, got %s", approved)
 		}
 	}
 }
