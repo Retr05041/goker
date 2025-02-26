@@ -32,6 +32,7 @@ func showMenuUI(givenWindow fyne.Window) {
 	host := widget.NewButton("Host", func() {
 		if nickname.Text != "" {
 			channelmanager.FGUI_ActionChan <- channelmanager.ActionType{Action: "hostOrConnectPressed", DataS: []string{nickname.Text}}
+			isHost = true
 			showHostUI(givenWindow)
 		}
 	})

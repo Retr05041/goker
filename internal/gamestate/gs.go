@@ -21,17 +21,24 @@ type GameState struct {
 
 	// Bets made during this round
 	BetHistory map[peer.ID]float64
-	// Bets made during this phase
-	PhaseBets map[peer.ID]float64
-	MylastBet float64
 
 	// On play being pressed
-	PlayersMoney  map[peer.ID]float64 // Players money by peer ID
-	TurnOrder     map[int]peer.ID     // Handled by network (based off of candidate list)
-	WhosTurn      int
-	FoldedPlayers map[peer.ID]bool // Holds who has folded this round
+	PlayersMoney map[peer.ID]float64 // Players money by peer ID
 
-	// Handled by host
+	// Turn order
+	TurnOrder map[int]peer.ID // Handled by network (based off of candidate list)
+	WhosTurn  int
+
+	// Round variables
+	// Holds who has folded this round
+	FoldedPlayers map[peer.ID]bool
+	// Bets made during this phase - used for raising, call, and check
+	PhaseBets map[peer.ID]float64
+	MylastBet float64 // Holds the last bet I placed
+	// Holds weather a player has played this phase - Used to determine when the move to next phase
+	PlayedThisPhase map[peer.ID]bool
+
+	// Table rules (set my host)
 	StartingCash float64 // Starting cash for all players
 	MinBet       float64 // Minimum bet required for the round (again from table settings)
 	Phase        string  // Current phase of the game (e.g., "preflop", "flop", "turn", "river")
@@ -89,6 +96,7 @@ func (gs *GameState) AddPeerToState(peerID peer.ID, nickname string) {
 	gs.Players[peerID] = nickname
 	gs.BetHistory[peerID] = 0.0
 	gs.FoldedPlayers[peerID] = false
+	gs.PlayedThisPhase[peerID] = false
 }
 
 func (gs *GameState) RemovePeerFromState(peerID peer.ID) {
@@ -248,15 +256,45 @@ func (gs *GameState) PlayerBet(peerID peer.ID, bet float64) {
 	gs.mu.Unlock()
 }
 
+func (gs *GameState) PlayerRaise(peerID peer.ID, bet float64) {
+	gs.PlayerBet(peerID, bet)
+	for key := range gs.PlayedThisPhase {
+		if gs.PlayedThisPhase[key] {
+			gs.PlayedThisPhase[key] = false // We need to make the others call or raise or fold again
+		}
+	}
+
+	if peerID == gs.Me {
+		gs.PlayedThisPhase[gs.Me] = true
+	}
+}
+
 func (gs *GameState) PlayerCall(peerID peer.ID) {
 	gs.PlayerBet(peerID, gs.GetHighestbetThisPhase())
+	gs.PlayedThisPhase[peerID] = true
 }
 
 func (gs *GameState) PlayerFold(peerID peer.ID) {
 	gs.FoldedPlayers[peerID] = true
+	delete(gs.PlayedThisPhase, peerID) // As he won't be apart of anymore phases
 }
 
+// Determines whos going and will check if the phases need to be switched
 func (gs *GameState) NextTurn() {
+	if len(gs.Players) == 1 { // If your last sitting at the table, just leave
+		gs.EndRound()
+	}
+
+	phaseSwitch := true
+	for key := range gs.PlayedThisPhase {
+		if !gs.PlayedThisPhase[key] {
+			phaseSwitch = false
+		}
+	}
+	if phaseSwitch {
+		gs.NextPhase()
+	}
+
 	// Modular arithmetic to wrap around
 	nextValidPlayer := (gs.WhosTurn + 1) % len(gs.Players)
 
@@ -272,4 +310,37 @@ func (gs *GameState) NextTurn() {
 
 func (gs *GameState) IsMyTurn() bool {
 	return gs.Me == gs.TurnOrder[gs.WhosTurn]
+}
+
+func (gs *GameState) NextPhase() {
+	gs.MylastBet = 0
+	for key := range gs.PlayedThisPhase {
+		gs.PlayedThisPhase[key] = false
+	}
+	for key := range gs.PhaseBets {
+		gs.PhaseBets[key] = 0.0
+	}
+
+	// (e.g., "preflop", "flop", "turn", "river")
+	switch gs.Phase {
+	case "preflop":
+		gs.Phase = "flop"
+	case "flop":
+		gs.Phase = "turn"
+	case "turn":
+		gs.Phase = "river"
+	case "river":
+		log.Println("Round over!")
+		gs.EndRound()
+	}
+	fmt.Println("CURRENT PHASE: " + gs.Phase)
+}
+
+func (gs *GameState) PlayerCheck(peerID peer.ID) {
+	gs.PlayedThisPhase[peerID] = true
+}
+
+// This will be called when all phases have been done, or if there is only 1 person left at the table
+func (gs *GameState) EndRound() {
+	channelmanager.TGUI_EndRound <- struct{}{}
 }

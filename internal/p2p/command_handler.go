@@ -107,7 +107,7 @@ func (p *GokerPeer) handleStream(stream network.Stream) {
 	case "MoveToTable":
 		channelmanager.TGUI_StartRound <- struct{}{} // Tell GUI to move to the table UI
 	case "Raise":
-		p.gameState.PlayerBet(stream.Conn().RemotePeer(), nCmd.Payload.(float64))
+		p.gameState.PlayerRaise(stream.Conn().RemotePeer(), nCmd.Payload.(float64))
 		p.gameState.NextTurn()
 		p.RespondToCommand(&RaiseCommand{}, stream)
 	case "Fold":
@@ -119,6 +119,7 @@ func (p *GokerPeer) handleStream(stream network.Stream) {
 		p.gameState.NextTurn()
 		p.RespondToCommand(&CallCommand{}, stream)
 	case "Check":
+		p.gameState.PlayerCheck(stream.Conn().RemotePeer())
 		p.gameState.NextTurn()
 		p.RespondToCommand(&CheckCommand{}, stream)
 	default:

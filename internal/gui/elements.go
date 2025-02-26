@@ -14,6 +14,7 @@ var (
 	numOfPlayers    = widget.NewLabel(fmt.Sprintf("# of players: %d", 1))
 	loopbackAddress string
 	lanAddress      string
+	isHost          bool
 
 	// Game
 	boardSize   = fyne.NewSize((234*5)/2, 333/2)   // 234x333 per card

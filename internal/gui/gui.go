@@ -62,6 +62,12 @@ func gmListener(window fyne.Window) {
 			updateCards(playerInfo)
 		case <-channelmanager.TGUI_StartRound:
 			showGameScreen(window)
+		case <-channelmanager.TGUI_EndRound:
+			if isHost {
+				showHostUI(window)
+			} else {
+				showConnectedUI(window)
+			}
 		}
 	}
 }
