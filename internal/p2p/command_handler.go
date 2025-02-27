@@ -801,7 +801,7 @@ func (r *RaiseCommand) Execute(p *GokerPeer) {
 
 	command := NetworkCommand{
 		Command: "Raise",
-		Payload: p.gameState.MylastBet,
+		Payload: p.gameState.MyBet,
 	}
 
 	for _, peerInfo := range p.peerList {

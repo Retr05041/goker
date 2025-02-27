@@ -34,7 +34,7 @@ type GameState struct {
 	FoldedPlayers map[peer.ID]bool
 	// Bets made during this phase - used for raising, call, and check
 	PhaseBets map[peer.ID]float64
-	MylastBet float64 // Holds the last bet I placed
+	MyBet     float64
 	// Holds weather a player has played this phase - Used to determine when the move to next phase
 	PlayedThisPhase map[peer.ID]bool
 
@@ -190,7 +190,7 @@ func (gs *GameState) GetPlayerInfo() channelmanager.PlayerInfo {
 		}
 	}
 
-	return channelmanager.PlayerInfo{Players: players, Money: money, Me: me, HighestBet: gs.GetHighestbetThisPhase(), WhosTurn: whosTurn}
+	return channelmanager.PlayerInfo{Players: players, Money: money, Me: me, HighestBet: gs.GetHighestbetThisPhase(), WhosTurn: whosTurn, MyBetSoFar: gs.MyBet}
 }
 
 func (gs *GameState) GetHighestbetThisPhase() float64 {
@@ -252,7 +252,6 @@ func (gs *GameState) PlayerBet(peerID peer.ID, bet float64) {
 	gs.PlayersMoney[peerID] -= bet // Lower players money
 	gs.BetHistory[peerID] += bet   // Update the best history for the round
 	gs.PhaseBets[peerID] += bet
-	gs.MylastBet = bet
 	gs.mu.Unlock()
 }
 
@@ -267,10 +266,13 @@ func (gs *GameState) PlayerRaise(peerID peer.ID, bet float64) {
 	if peerID == gs.Me {
 		gs.PlayedThisPhase[gs.Me] = true
 	}
+
+	gs.MyBet += bet
 }
 
 func (gs *GameState) PlayerCall(peerID peer.ID) {
 	gs.PlayerBet(peerID, gs.GetHighestbetThisPhase())
+	gs.MyBet = gs.GetHighestbetThisPhase()
 	gs.PlayedThisPhase[peerID] = true
 }
 
@@ -313,7 +315,7 @@ func (gs *GameState) IsMyTurn() bool {
 }
 
 func (gs *GameState) NextPhase() {
-	gs.MylastBet = 0
+	gs.MyBet = 0
 	for key := range gs.PlayedThisPhase {
 		gs.PlayedThisPhase[key] = false
 	}

@@ -28,11 +28,12 @@ var (
 
 	playerCards = container.NewVBox()
 
-	myMoney    = 0.0
-	highestBet = 0.0
-	valueLabel = widget.NewLabel(fmt.Sprintf("$%.0f", 0.0))
-	betSlider  = widget.NewSlider(0, 100)
-	potLabel   = widget.NewLabel(fmt.Sprintf("Pot: $%.0f", 0.0))
+	myMoney     = 0.0
+	highestBet  = 0.0
+	myBetsSoFar = 0.0
+	valueLabel  = widget.NewLabel(fmt.Sprintf("$%.0f", 0.0))
+	betSlider   = widget.NewSlider(0, 100)
+	potLabel    = widget.NewLabel(fmt.Sprintf("Pot: $%.0f", 0.0))
 )
 
 func initElements() {
@@ -45,7 +46,7 @@ func initElements() {
 		channelmanager.FGUI_ActionChan <- channelmanager.ActionType{Action: "Fold"}
 	})
 	raiseButton = widget.NewButton("Raise", func() {
-		if (betSlider.Value <= myMoney) && (betSlider.Value > highestBet) {
+		if (betSlider.Value <= myMoney) && (betSlider.Value+myBetsSoFar > highestBet) {
 			channelmanager.FGUI_ActionChan <- channelmanager.ActionType{Action: "Raise", DataF: betSlider.Value}
 		}
 	})

@@ -109,6 +109,7 @@ func updateCards(playerInfo channelmanager.PlayerInfo) {
 	playerCards.Objects = nil
 
 	highestBet = playerInfo.HighestBet
+	myBetsSoFar = playerInfo.MyBetSoFar
 
 	if playerInfo.Me == playerInfo.WhosTurn {
 		foldButton.Enable()
