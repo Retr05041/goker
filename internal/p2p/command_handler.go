@@ -98,7 +98,7 @@ func (p *GokerPeer) handleStream(stream network.Stream) {
 		p.RespondToCommand(&ProtocolSecondStepCommand{}, stream)
 	case "BroadcastDeck": // Final shuffled deck
 		p.Deck.SetDeckInPlace(nCmd.Payload.(string))
-		p.SetHands() // Make sure at the end of the second step of the protocol to set everyones hands for that round
+		p.SetMyHand() // Get my hand ready for decryption
 		p.RespondToCommand(&BroadcastDeck{}, stream)
 	case "CanRequestHand": // Once everythings ready this will be recieved from the host, so everyone can reqeust their cards
 		p.ExecuteCommand(&RequestHandCommand{})
@@ -564,7 +564,7 @@ func (sp *ProtocolSecondStepCommand) Execute(p *GokerPeer) {
 	}
 
 	p.Deck.SetDeckInPlace(command.Payload.(string))
-	p.SetHands() // Now that the new deck is in place, we can set hands
+	p.SetMyHand() // Time to set my own hand
 	log.Println("ProtocolSecondStepCommand: All peers have contributed, continueing...")
 }
 

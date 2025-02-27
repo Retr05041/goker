@@ -101,11 +101,14 @@ func (d *deckInfo) GetCardFromRefDeck(cardHash *big.Int) (key string, ok bool) {
 	return "", false
 }
 
+// Send a copy of the card at this index
 func (d *deckInfo) GetCardFromRoundDeck(cardIndex int) *CardInfo {
 	if cardIndex < 0 || cardIndex >= len(d.RoundDeck) {
 		return nil
 	}
-	return &d.RoundDeck[cardIndex]
+
+	cardCopy := d.RoundDeck[cardIndex]
+	return &cardCopy
 }
 
 // Creates a payload to be sent to anther peer
@@ -173,21 +176,16 @@ func (p *GokerPeer) EncryptAllWithVariation() {
 func (p *GokerPeer) GetKeyPayloadForPlayersHand(peerID peer.ID) string {
 	var keys []string
 
-	for _, handInfo := range p.Hands {
-		if handInfo.Peer == peerID {
-			if len(handInfo.Hand) < 2 {
-				log.Println("error: Hand has less than 2 cards for peer")
-				continue
-			}
+	IDs := p.gameState.GetTurnOrder()
 
-			cardOneKey := p.Keyring.GetKeyForCard(handInfo.Hand[0].VariationIndex)
-			cardTwoKey := p.Keyring.GetKeyForCard(handInfo.Hand[1].VariationIndex)
-
+	for i := range IDs {
+		if IDs[i] == peerID { // If its the peer we want
+			cardOneKey := p.Keyring.GetKeyForCard(p.Deck.GetCardFromRoundDeck(i).VariationIndex)
+			cardTwoKey := p.Keyring.GetKeyForCard(p.Deck.GetCardFromRoundDeck(len(IDs) + i).VariationIndex)
 			if cardOneKey == nil || cardTwoKey == nil {
-				log.Println("error: Could not retrieve key for one or both cards")
+				log.Fatalf("error: Could not retrieve key for one or both cards")
 				continue
 			}
-
 			keys = append(keys, cardOneKey.String())
 			keys = append(keys, cardTwoKey.String())
 			break
@@ -201,28 +199,20 @@ func (p *GokerPeer) GetKeyPayloadForPlayersHand(peerID peer.ID) string {
 	return strings.Join(keys, "\n")
 }
 
-// Creates the hands array, Should be done once the second step of the protocol is done
-func (p *GokerPeer) SetHands() {
+// Set my hand
+func (p *GokerPeer) SetMyHand() {
 	IDs := p.gameState.GetTurnOrder()
 
-	p.Hands = make([]HandInfo, 0, len(IDs))
-
 	for i, id := range IDs {
-		cardOne := p.Deck.GetCardFromRoundDeck(i)
-		cardTwo := p.Deck.GetCardFromRoundDeck(len(IDs) + i)
-
 		if id == p.ThisHost.ID() { // put this host in another place
+			cardOne := p.Deck.GetCardFromRoundDeck(i)
+			cardTwo := p.Deck.GetCardFromRoundDeck(len(IDs) + i)
 			p.MyHand = HandInfo{
 				Peer: id,
 				Hand: []CardInfo{*cardOne, *cardTwo},
 			}
-			continue
+			break
 		}
-
-		p.Hands = append(p.Hands, HandInfo{
-			Peer: id,
-			Hand: []CardInfo{*cardOne, *cardTwo},
-		})
 	}
 }
 
