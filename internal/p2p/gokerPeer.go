@@ -47,8 +47,7 @@ func (p *GokerPeer) Init(nickname string, hosting bool, givenAddr string, givenS
 	p.Keyring = new(sra.Keyring)
 	p.Deck = new(deckInfo)
 	// TODO: Make this decided at runtime?
-	p.Deck.GenerateRefDeck("gokerdecksecretkeyforhashesversion1")
-	p.Deck.GenerateRoundDeck("gokerdecksecretkeyforhashesversion1")
+	p.Deck.GenerateDecks("gokerdecksecretkeyforhashesversion1")
 
 	// Set the givenState
 	p.gameState = givenState

@@ -47,41 +47,24 @@ func generateCardHash(card string, secretKey string) *big.Int {
 	return hash
 }
 
-// VerifyCardHash verifies if the hash matches the card
-func VerifyCardHash(card string, secretKey string, hash *big.Int) bool {
-	expectedHash := generateCardHash(card, secretKey)
-	return expectedHash.Cmp(hash) == 0
-}
-
 // Creates new reference deck
-func (d *deckInfo) GenerateRefDeck(key string) {
+func (d *deckInfo) GenerateDecks(key string) {
 	newRefDeck := make(map[string]*big.Int, 52)
-
-	for _, suit := range suits {
-		for _, rank := range ranks {
-			cardName := suit + "_" + rank
-			cardHash := generateCardHash(cardName, key)
-
-			newRefDeck[cardName] = cardHash
-		}
-	}
-	d.ReferenceDeck = newRefDeck
-}
-
-// Generate the round deck, which will just be all the hash's from the reference deck
-func (d *deckInfo) GenerateRoundDeck(key string) {
-	newDeck := make([]CardInfo, 0, 52)
+	newRoundDeck := make([]CardInfo, 0, 52)
 
 	index := 0
 	for _, suit := range suits {
 		for _, rank := range ranks {
 			cardName := suit + "_" + rank
 			cardHash := generateCardHash(cardName, key)
-			newDeck = append(newDeck, CardInfo{index: index, CardValue: cardHash})
+
+			newRefDeck[cardName] = cardHash
+			newRoundDeck = append(newRoundDeck, CardInfo{index: index, CardValue: cardHash})
 			index++
 		}
 	}
-	d.RoundDeck = newDeck
+	d.ReferenceDeck = newRefDeck
+	d.RoundDeck = newRoundDeck
 }
 
 // Shuffle the round deck
@@ -124,7 +107,8 @@ func (d *deckInfo) GenerateDeckPayload() string {
 // Used during first round of protocol, as variation order doesn't mater
 func (d *deckInfo) SetNewDeck(payload string) {
 	var newDeck []CardInfo
-	for i, line := range strings.Split(payload, "\n") {
+	lines := strings.Split(strings.TrimSpace(payload), "\n")
+	for i, line := range lines {
 		card, success := new(big.Int).SetString(line, 10)
 		if !success {
 			log.Printf("SetDeck: Failed to parse card value: %s", line)
@@ -136,7 +120,14 @@ func (d *deckInfo) SetNewDeck(payload string) {
 }
 
 func (d *deckInfo) SetDeckInPlace(payload string) {
-	for i, line := range strings.Split(payload, "\n") {
+	lines := strings.Split(strings.TrimSpace(payload), "\n")
+
+	if len(lines) != len(d.RoundDeck) {
+		log.Printf("SetDeckInPlace: Mismatched deck sizes (RoundDeck: %d, Payload: %d)", len(d.RoundDeck), len(lines))
+		return
+	}
+
+	for i, line := range lines {
 		card, success := new(big.Int).SetString(line, 10)
 		if !success {
 			log.Printf("SetDeck: Failed to parse card value: %s", line)
