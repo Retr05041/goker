@@ -2,6 +2,7 @@ package sra
 
 import (
 	"fmt"
+	"log"
 	"math/big"
 )
 
@@ -16,31 +17,29 @@ func (k *Keyring) GenerateKeyVariations(count int) error {
 
 	k.keyVariations = make([]*KeyVariation, count)
 
-	for i := 0; i < count; i++ {
-		currentVariation := new(KeyVariation)
-
+	for i := range count {
 		r, err := generateRandomCoPrime(k.globalPHI)
 		if err != nil {
 			return err
 		}
 
-		// Use a copy of phi when calling modInverse
-		rInv, err := modInverse(r, k.globalPHI)
-		if err != nil {
-			return err
+		rInv := new(big.Int).ModInverse(r, k.globalPHI)
+		if rInv == nil {
+			log.Fatalf("Modular inverse does not exist for variation %d", i)
 		}
 
-		currentVariation.publicKey = new(big.Int).Mod(new(big.Int).Mul(k.globalPublicKey, r), k.globalPHI)
-		currentVariation.privateKey = new(big.Int).Mod(new(big.Int).Mul(k.globalPrivateKey, rInv), k.globalPHI)
-		currentVariation.variationValue = r
-		k.keyVariations[i] = currentVariation
+		k.keyVariations[i] = &KeyVariation{
+			publicKey:      new(big.Int).Mod(new(big.Int).Mul(k.globalPublicKey, r), k.globalPHI),
+			privateKey:     new(big.Int).Mod(new(big.Int).Mul(k.globalPrivateKey, rInv), k.globalPHI),
+			variationValue: r,
+		}
 	}
 
 	return nil
 }
 
 func (k *Keyring) EncryptWithVariation(data *big.Int, index int) (*big.Int, error) {
-	if index >= len(k.keyVariations) {
+	if index < 0 || index >= len(k.keyVariations) || k.keyVariations[index] == nil {
 		return nil, fmt.Errorf("invalid key variation index")
 	}
 	return new(big.Int).Exp(data, k.keyVariations[index].publicKey, k.globalN), nil

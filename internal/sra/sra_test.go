@@ -31,22 +31,6 @@ func TestGCD(t *testing.T) {
 	}
 }
 
-// TestModInverse checks if the modular inverse function returns the correct value.
-func TestModInverse(t *testing.T) {
-	a := big.NewInt(3)
-	m := big.NewInt(26)
-
-	inv, err := modInverse(a, m)
-	if err != nil {
-		t.Fatalf("modInverse failed: %v", err)
-	}
-
-	expected := big.NewInt(9) // Since (3 * 9) % 26 = 1
-	if inv.Cmp(expected) != 0 {
-		t.Errorf("Expected modInverse(%d, %d) = %d, got %d", a, m, expected, inv)
-	}
-}
-
 // TestGenerateKeys ensures key generation works correctly.
 func TestGenerateKeys(t *testing.T) {
 	k := &Keyring{}

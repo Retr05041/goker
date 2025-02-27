@@ -35,11 +35,7 @@ func (k *Keyring) GenerateTimeLockedPuzzle(payload string, seconds int64) *TimeL
 	}
 
 	// P&Q - will be burned
-	p, err := generateLargePrime(2048)
-	if err != nil {
-		fmt.Println(err)
-	}
-	q, err := generateLargePrime(2048)
+	p, q, err := generateLargePrime(2048)
 	if err != nil {
 		fmt.Println(err)
 	}
