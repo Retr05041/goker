@@ -688,66 +688,72 @@ func (rh *RequestHandCommand) Execute(peer *GokerPeer) {
 	peer.peerListMutex.Lock()
 	defer peer.peerListMutex.Unlock()
 
-	var cardOneKeys []string
-	var cardTwoKeys []string
+	var attempt int
+	maxAttempts := 2
 
-	command := NetworkCommand{
-		Command: "RequestHand",
-	}
+	for attempt < maxAttempts {
+		attempt++
 
-	for _, peerInfo := range peer.peerList {
-		if peerInfo.ID == peer.ThisHost.ID() {
-			continue
+		var cardOneKeys []string
+		var cardTwoKeys []string
+
+		command := NetworkCommand{
+			Command: "RequestHand",
 		}
 
-		stream, err := peer.ThisHost.NewStream(context.Background(), peerInfo.ID, protocolID)
-		if err != nil {
-			log.Printf("RequestHand: Failed to create stream to host %s: %v\n", peerInfo.ID, err)
+		for _, peerInfo := range peer.peerList {
+			if peerInfo.ID == peer.ThisHost.ID() {
+				continue
+			}
+
+			stream, err := peer.ThisHost.NewStream(context.Background(), peerInfo.ID, protocolID)
+			if err != nil {
+				log.Printf("RequestHand: Failed to create stream to host %s: %v\n", peerInfo.ID, err)
+				return
+			}
+			defer stream.Close()
+
+			if err := sendCommand(stream, command); err != nil {
+				log.Fatalf("RequestHand: failed to send command to peer %s: %v", peerInfo.ID, err)
+			}
+
+			response, err := receiveResponse(stream)
+			if err != nil {
+				log.Fatalf("RequestHand: failed to recieve response from peer: %s", peerInfo.ID)
+			}
+
+			keyPayload, ok := response.Payload.(string)
+			if !ok {
+				log.Fatalf("RequestHand: invalid response format: expected string, got %T", response.Payload)
+			}
+
+			keys := strings.Split(keyPayload, "\n")
+			cardOneKeys = append(cardOneKeys, keys[0])
+			cardTwoKeys = append(cardTwoKeys, keys[1])
+			log.Printf("RECIEVED KEYS from a peer: \n%s\n%s\n", keys[0], keys[1])
+		}
+
+		// Now that I have all the keys for my hand, decrypt the hand
+		peer.DecryptMyHand(cardOneKeys, cardTwoKeys)
+
+		// Set the hand in the GUI
+		cardOneName, exists := peer.Deck.GetCardFromRefDeck(peer.MyHand.Hand[0].CardValue) // Should be the hash
+		cardTwoName, exists2 := peer.Deck.GetCardFromRefDeck(peer.MyHand.Hand[1].CardValue)
+
+		if exists && exists2 {
+			peer.sendHandToGUI(cardOneName, cardTwoName)
 			return
 		}
-		defer stream.Close()
 
-		if err := sendCommand(stream, command); err != nil {
-			log.Fatalf("RequestHand: failed to send command to peer %s: %v", peerInfo.ID, err)
-		}
-
-		response, err := receiveResponse(stream)
-		if err != nil {
-			log.Fatalf("RequestHand: failed to recieve response from peer: %s", peerInfo.ID)
-		}
-
-		keyPayload, ok := response.Payload.(string)
-		if !ok {
-			log.Fatalf("RequestHand: invalid response format: expected string, got %T", response.Payload)
-		}
-
-		keys := strings.Split(keyPayload, "\n")
-		cardOneKeys = append(cardOneKeys, keys[0])
-		cardTwoKeys = append(cardTwoKeys, keys[1])
+		log.Printf("RequestHand (Attempt %d/%d): Couldn't find one or both cards in ref deck, retrying...\n", attempt, maxAttempts)
+		peer.SetMyHand() // reset hand
 	}
 
-	fmt.Println("RECIEVED KEYS")
-	fmt.Println(cardOneKeys)
-	fmt.Println(cardTwoKeys)
-
-	// Now that I have all the keys for my hand, decrypt the hand
-	peer.DecryptMyHand(cardOneKeys, cardTwoKeys)
-
-	// Set the hand in the GUI
-	cardOneName, exists := peer.Deck.GetCardFromRefDeck(peer.MyHand.Hand[0].CardValue) // Should be the hash
-	if !exists {
-		log.Fatalf("RequestHand: couldn't find card one: %s", peer.MyHand.Hand[0].CardValue.String())
-	}
-	cardTwoName, exists := peer.Deck.GetCardFromRefDeck(peer.MyHand.Hand[1].CardValue)
-	if !exists {
-		log.Fatalf("RequestHand: couldn't find card two: %s", peer.MyHand.Hand[1].CardValue.String())
-	}
-	peer.sendHandToGUI(cardOneName, cardTwoName)
+	log.Fatalf("RequestHand: Failed after retry, aborting.")
 }
 
 func (rh *RequestHandCommand) Respond(peer *GokerPeer, sendingStream network.Stream) {
 	payload := peer.GetKeyPayloadForPlayersHand(sendingStream.Conn().RemotePeer())
-	fmt.Println("SENDING KEYS: " + payload)
 	response := NetworkCommand{
 		Command: "RequestHand",
 		Payload: payload,
