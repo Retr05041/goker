@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"goker/internal/channelmanager"
 	"log"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -239,9 +240,19 @@ func (gs *GameState) GetTurnOrder() []peer.ID {
 	gs.mu.Lock()
 	defer gs.mu.Unlock()
 
-	var ids []peer.ID
-	for _, v := range gs.TurnOrder {
-		ids = append(ids, v)
+	// Extract keys (turn positions)
+	positions := make([]int, 0, len(gs.TurnOrder))
+	for pos := range gs.TurnOrder {
+		positions = append(positions, pos)
+	}
+
+	// Sort keys to maintain turn order
+	sort.Ints(positions)
+
+	// Collect peer IDs in sorted order
+	ids := make([]peer.ID, len(positions))
+	for i, pos := range positions {
+		ids[i] = gs.TurnOrder[pos]
 	}
 
 	return ids

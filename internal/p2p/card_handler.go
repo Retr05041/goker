@@ -189,7 +189,7 @@ func (p *GokerPeer) GetKeyPayloadForPlayersHand(peerID peer.ID) string {
 	}
 
 	fmt.Println("SENDING KEYS")
-	fmt.Print(keys)
+	fmt.Println(keys)
 
 	return strings.Join(keys, "\n")
 }

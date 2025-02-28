@@ -80,8 +80,7 @@ func (gm *GameManager) listenForActions() {
 				gm.network.ExecuteCommand(&p2p.BroadcastDeck{})
 
 				// Setup hands
-				gm.network.ExecuteCommand(&p2p.CanRequestHand{})     // Tell everyone they can request their keys now
-				gm.network.ExecuteCommand(&p2p.RequestHandCommand{}) // Get the keys for YOUR hand and set it in the GUI
+				gm.network.ExecuteCommand(&p2p.DealCommand{}) // Deals hands one player at at time
 
 				// TODO:
 				//gm.network.ExecuteCommand(&p2p.KeyExchangeCommand{}) // Everyone sends each others timelocked payload to each other and they all begin to crack it

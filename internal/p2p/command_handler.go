@@ -100,7 +100,7 @@ func (p *GokerPeer) handleStream(stream network.Stream) {
 		p.Deck.SetDeckInPlace(nCmd.Payload.(string))
 		p.SetMyHand() // Get my hand ready for decryption
 		p.RespondToCommand(&BroadcastDeck{}, stream)
-	case "CanRequestHand": // Once everythings ready this will be recieved from the host, so everyone can reqeust their cards
+	case "CanRequestHand":
 		p.ExecuteCommand(&RequestHandCommand{})
 	case "RequestHand": // Someone is requesting the keys to their hand
 		p.RespondToCommand(&RequestHandCommand{}, stream)
@@ -388,15 +388,14 @@ func (sp *ProtocolFirstStepCommand) Execute(p *GokerPeer) {
 	p.EncryptAllWithGlobalKeys()
 	p.Deck.ShuffleRoundDeck()
 
-	p.peerListMutex.Lock()
-	defer p.peerListMutex.Unlock()
-
 	// So I don't have to set the deck each turn
 	command := NetworkCommand{
 		Command: "ProtocolFS",
 		Payload: p.Deck.GenerateDeckPayload(),
 	}
 
+	p.peerListMutex.Lock()
+	defer p.peerListMutex.Unlock()
 	// Get each peer to shuffle and encrypt deck
 	for _, peerInfo := range p.peerList {
 		if peerInfo.ID == p.ThisHost.ID() {
@@ -649,39 +648,58 @@ func (b *BroadcastDeck) Respond(p *GokerPeer, sendingStream network.Stream) {
 	}
 }
 
-//////////////////////////////////////////// REQUEST HAND COMMAND /////////////////////////////////////////////////////
+//////////////////////////////////////////// DEALING COMMAND /////////////////////////////////////////////////////
 
-// Updates everyone that they can request their hand
-type CanRequestHand struct{}
+// Initiates the dealing - Every peer starting with host requests their keys
+// Doing this to stop race conditions in the network...
+type DealCommand struct{}
 
-func (c *CanRequestHand) Execute(p *GokerPeer) {
-	p.peerListMutex.Lock()
-	defer p.peerListMutex.Unlock()
+func (dc *DealCommand) Execute(peer *GokerPeer) {
+	IDs := peer.gameState.GetTurnOrder()
+	myIndex := -1
 
+	// Find this peer's position in turn order
+	for i, id := range IDs {
+		if id == peer.ThisHost.ID() {
+			myIndex = i
+			break
+		}
+	}
+
+	if myIndex == -1 {
+		log.Fatalf("DealCommand: This peer is not in the turn order")
+	}
+
+	peer.ExecuteCommand(&RequestHandCommand{})
+}
+
+func (d *DealCommand) Respond(p *GokerPeer, sendingStream network.Stream) {}
+
+// Notifies the next peer that it's their turn to request their hand
+func (p *GokerPeer) NotifyNextPeer(IDs []peer.ID, myIndex int) {
+	if myIndex+1 >= len(IDs) {
+		log.Println("NotifyNextPeer: All peers have received their hand.")
+		return
+	}
+
+	nextPeerID := IDs[myIndex+1]
 	command := NetworkCommand{
 		Command: "CanRequestHand",
 	}
 
-	for _, peerInfo := range p.peerList {
-		if peerInfo.ID == p.ThisHost.ID() {
-			continue
-		}
+	stream, err := p.ThisHost.NewStream(context.Background(), nextPeerID, protocolID)
+	if err != nil {
+		log.Printf("NotifyNextPeer: Failed to notify next peer %s: %v\n", nextPeerID, err)
+		return
+	}
+	defer stream.Close()
 
-		stream, err := p.ThisHost.NewStream(context.Background(), peerInfo.ID, protocolID)
-		if err != nil {
-			log.Printf("CanRequestHand: failed to create stream to host %s: %v\n", peerInfo.ID, err)
-			return
-		}
-		defer stream.Close()
-
-		if err := sendCommand(stream, command); err != nil {
-			log.Fatalf("CanRequestHand: failed to send command to peer %s: %v", peerInfo.ID, err)
-		}
+	if err := sendCommand(stream, command); err != nil {
+		log.Printf("NotifyNextPeer: Failed to send CanRequestHand to peer %s: %v", nextPeerID, err)
 	}
 }
 
-func (c *CanRequestHand) Respond(p *GokerPeer, sendingStream network.Stream) {}
-
+// Used if it's your turn to request your hand
 type RequestHandCommand struct{}
 
 func (rh *RequestHandCommand) Execute(peer *GokerPeer) {
@@ -742,6 +760,21 @@ func (rh *RequestHandCommand) Execute(peer *GokerPeer) {
 
 		if exists && exists2 {
 			peer.sendHandToGUI(cardOneName, cardTwoName)
+
+			// I have my keys, alert the next person!
+			IDs := peer.gameState.GetTurnOrder()
+			myIndex := -1
+			for i, id := range IDs {
+				if id == peer.ThisHost.ID() {
+					myIndex = i
+					break
+				}
+			}
+
+			if myIndex != -1 {
+				peer.NotifyNextPeer(IDs, myIndex)
+			}
+
 			return
 		}
 
@@ -798,7 +831,6 @@ func (mtt *MoveToTableCommand) Execute(peer *GokerPeer) {
 
 func (mtt *MoveToTableCommand) Respond(peer *GokerPeer, sendingStream network.Stream) {}
 
-// TODO: Implement these.
 type RaiseCommand struct{}
 
 func (r *RaiseCommand) Execute(p *GokerPeer) {
