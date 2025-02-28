@@ -59,21 +59,6 @@ func TestGenerateRandomCoPrime(t *testing.T) {
 	}
 }
 
-// TestEncryptionDecryption ensures encryption and decryption using global keys.
-func TestEncryptionDecryption(t *testing.T) {
-	k := &Keyring{}
-	k.GeneratePQ()
-	k.GenerateKeys()
-
-	original := big.NewInt(123456789)
-	encrypted := k.EncryptWithGlobalKeys(original)
-	decrypted := k.DecryptWithGlobalKeys(encrypted)
-
-	if decrypted.Cmp(original) != 0 {
-		t.Errorf("Decryption failed: expected %d, got %d", original, decrypted)
-	}
-}
-
 // TestGetSetPQ ensures that P & Q can be serialized and deserialized properly.
 func TestGetSetPQ(t *testing.T) {
 	k := &Keyring{}

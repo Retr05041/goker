@@ -38,25 +38,29 @@ func (k *Keyring) GenerateKeyVariations(count int) error {
 	return nil
 }
 
-func (k *Keyring) EncryptWithVariation(data *big.Int, index int) (*big.Int, error) {
+func (k *Keyring) EncryptWithVariation(data *big.Int, index int) error {
 	if index < 0 || index >= len(k.keyVariations) || k.keyVariations[index] == nil {
-		return nil, fmt.Errorf("invalid key variation index")
+		return fmt.Errorf("invalid key variation index")
 	}
-	return new(big.Int).Exp(data, k.keyVariations[index].publicKey, k.globalN), nil
+
+	data.Exp(data, k.keyVariations[index].publicKey, k.globalN)
+	return nil
 }
 
-func (k *Keyring) DecryptWithVariation(data *big.Int, index int) (*big.Int, error) {
+func (k *Keyring) DecryptWithVariation(data *big.Int, index int) error {
 	if index >= len(k.keyVariations) {
-		return nil, fmt.Errorf("invalid key variation index")
+		return fmt.Errorf("invalid key variation index")
 	}
-	return new(big.Int).Exp(data, k.keyVariations[index].privateKey, k.globalN), nil
+
+	data.Exp(data, k.keyVariations[index].privateKey, k.globalN)
+	return nil
 }
 
-func (k *Keyring) DecryptWithKey(cipherText *big.Int, key *big.Int) *big.Int {
-	return new(big.Int).Exp(cipherText, key, k.globalN)
+func (k *Keyring) DecryptWithKey(data *big.Int, key *big.Int) {
+	data.Exp(data, key, k.globalN)
 }
 
-func (k *Keyring) GetKeyForCard(variationIndex int) *big.Int {
+func (k *Keyring) GetVariationKeyForCard(variationIndex int) *big.Int {
 	return k.keyVariations[variationIndex].privateKey
 }
 

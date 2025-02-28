@@ -64,16 +64,14 @@ func (k *Keyring) GenerateKeys() error {
 	return nil
 }
 
-// Encrypts message (hash) with the global keys inside the keyring.
-// Should check if keys exist before attempting
-func (k *Keyring) EncryptWithGlobalKeys(data *big.Int) *big.Int {
-	return new(big.Int).Exp(data, k.globalPublicKey, k.globalN)
+// Encrypts data with the global keys inside the keyring.
+func (k *Keyring) EncryptWithGlobalKeys(data *big.Int) {
+	data.Exp(data, k.globalPublicKey, k.globalN)
 }
 
-// Decyrpts message (hash) with the global keys inside the keyring.
-// Should check if keys exist before attempting
-func (k *Keyring) DecryptWithGlobalKeys(data *big.Int) *big.Int {
-	return new(big.Int).Exp(data, k.globalPrivateKey, k.globalN)
+// Decyrpts data with the global keys inside the keyring.
+func (k *Keyring) DecryptWithGlobalKeys(data *big.Int) {
+	data.Exp(data, k.globalPrivateKey, k.globalN)
 }
 
 // Returns P&Q as a string - meant for being sent over a stream for a PQRequest
