@@ -28,8 +28,11 @@ type GokerPeer struct {
 	peerListMutex sync.Mutex // Mutex for accessing peer map
 
 	// Other
-	Deck    *deckInfo    // Holds all deck logic (cards, deck operations etc.)
-	MyHand  HandInfo     // Holds my hand
+	Deck    *deckInfo  // Holds all deck logic (cards, deck operations etc.)
+	MyHand  []CardInfo // Holds my hand
+	Flop    []CardInfo // Holds flop
+	Turn    CardInfo
+	River   CardInfo
 	Keyring *sra.Keyring // Holds all encryption logic
 
 	// state given by the game manager

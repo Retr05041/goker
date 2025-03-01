@@ -22,12 +22,6 @@ type deckInfo struct {
 	RoundDeck []CardInfo
 }
 
-// Holds a peers hand info
-type HandInfo struct {
-	Peer peer.ID
-	Hand []CardInfo
-}
-
 // Holds individual card info
 type CardInfo struct {
 	index          int
@@ -188,13 +182,9 @@ func (p *GokerPeer) GetKeyPayloadForPlayersHand(peerID peer.ID) string {
 		log.Println("warning: No matching hand found for peer")
 	}
 
-	fmt.Println("SENDING KEYS")
-	fmt.Println(keys)
-
 	return strings.Join(keys, "\n")
 }
 
-// Set my hand
 func (p *GokerPeer) SetMyHand() {
 	IDs := p.gameState.GetTurnOrder()
 
@@ -207,10 +197,7 @@ func (p *GokerPeer) SetMyHand() {
 				log.Fatalf("error: Could not set my hand, missing cardOne or cardTwo\n")
 			}
 
-			p.MyHand = HandInfo{
-				Peer: id,
-				Hand: []CardInfo{cardOne, cardTwo},
-			}
+			p.MyHand = []CardInfo{cardOne, cardTwo}
 			break
 		}
 	}
@@ -226,7 +213,7 @@ func (p *GokerPeer) DecryptMyHand(cardOneKeys []string, cardTwoKeys []string) {
 			return
 		}
 		//log.Printf("Decrypting Card 1: %s\n with Key: %s\n", p.MyHand.Hand[0].CardValue.String(), keyOne.String())
-		p.Keyring.DecryptWithKey(p.MyHand.Hand[0].CardValue, keyOne)
+		p.Keyring.DecryptWithKey(p.MyHand[0].CardValue, keyOne)
 	}
 
 	// Decrypt card two
@@ -236,15 +223,15 @@ func (p *GokerPeer) DecryptMyHand(cardOneKeys []string, cardTwoKeys []string) {
 			log.Println("DecryptMyHand: error: Unable to convert string to big.Int")
 			return
 		}
-		p.Keyring.DecryptWithKey(p.MyHand.Hand[1].CardValue, keyTwo)
+		p.Keyring.DecryptWithKey(p.MyHand[1].CardValue, keyTwo)
 	}
 
-	err := p.Keyring.DecryptWithVariation(p.MyHand.Hand[0].CardValue, p.MyHand.Hand[0].VariationIndex)
+	err := p.Keyring.DecryptWithVariation(p.MyHand[0].CardValue, p.MyHand[0].VariationIndex)
 	if err != nil {
 		return
 	}
 
-	err = p.Keyring.DecryptWithVariation(p.MyHand.Hand[1].CardValue, p.MyHand.Hand[1].VariationIndex)
+	err = p.Keyring.DecryptWithVariation(p.MyHand[1].CardValue, p.MyHand[1].VariationIndex)
 	if err != nil {
 		return
 	}
@@ -268,5 +255,201 @@ func (p *GokerPeer) sendHandToGUI(cardOneName, cardTwoName string) {
 func (d *deckInfo) DumpRoundDeck() {
 	for _, card := range d.RoundDeck {
 		fmt.Println(card.CardValue)
+	}
+}
+
+func (p *GokerPeer) SetBoard() {
+	numOfPlayers := p.gameState.GetNumberOfPlayers()
+
+	cardOne := p.Deck.GetCardFromRoundDeck((numOfPlayers * 2) + 1) // all players hands + burn + first card
+	cardTwo := p.Deck.GetCardFromRoundDeck((numOfPlayers * 2) + 2)
+	cardThree := p.Deck.GetCardFromRoundDeck((numOfPlayers * 2) + 3)
+
+	cardFour := p.Deck.GetCardFromRoundDeck((numOfPlayers * 2) + 4)
+
+	cardFive := p.Deck.GetCardFromRoundDeck((numOfPlayers * 2) + 5)
+
+	if cardOne.CardValue == nil || cardTwo.CardValue == nil || cardThree.CardValue == nil || cardFour.CardValue == nil || cardFive.CardValue == nil {
+		log.Fatalf("error: Could not set board, missing cards \n")
+	}
+
+	p.Flop = []CardInfo{cardOne, cardTwo, cardThree}
+	p.Turn = cardFour
+	p.River = cardFive
+}
+
+func (p *GokerPeer) DecryptFlop(cardOneKeys, cardTwoKeys, cardThreeKeys []string) {
+	// Decrypt card one
+	for _, key := range cardOneKeys {
+		keyOne, success := new(big.Int).SetString(key, 10)
+		if !success {
+			log.Println("DecryptFlop: error: Unable to convert string to big.Int")
+			return
+		}
+		p.Keyring.DecryptWithKey(p.Flop[0].CardValue, keyOne)
+	}
+
+	// Decrypt card two
+	for _, key := range cardTwoKeys {
+		keyTwo, success := new(big.Int).SetString(key, 10)
+		if !success {
+			log.Println("DecryptFlop: error: Unable to convert string to big.Int")
+			return
+		}
+		p.Keyring.DecryptWithKey(p.Flop[1].CardValue, keyTwo)
+	}
+
+	// Decrypt card three
+	for _, key := range cardThreeKeys {
+		keyThree, success := new(big.Int).SetString(key, 10)
+		if !success {
+			log.Println("DecryptFlop: error: Unable to convert string to big.Int")
+			return
+		}
+		p.Keyring.DecryptWithKey(p.Flop[2].CardValue, keyThree)
+	}
+
+	err := p.Keyring.DecryptWithVariation(p.Flop[0].CardValue, p.Flop[0].VariationIndex)
+	if err != nil {
+		return
+	}
+
+	err = p.Keyring.DecryptWithVariation(p.Flop[1].CardValue, p.Flop[1].VariationIndex)
+	if err != nil {
+		return
+	}
+
+	err = p.Keyring.DecryptWithVariation(p.Flop[2].CardValue, p.Flop[2].VariationIndex)
+	if err != nil {
+		return
+	}
+}
+
+// Update board for GUI
+func (p *GokerPeer) sendBoardToGUI(cardOneName, cardTwoName, cardThreeName, cardFourName, cardFiveName *string) {
+	var cardOne *canvas.Image
+	if cardOneName != nil {
+		cardOne = canvas.NewImageFromFile("media/svg_playing_cards/fronts/png_96_dpi/" + *cardOneName + ".png")
+		cardOne.FillMode = canvas.ImageFillOriginal
+	} else {
+		cardOne = canvas.NewImageFromFile("media/svg_playing_cards/backs/png_96_dpi/red.png")
+		cardOne.FillMode = canvas.ImageFillOriginal
+	}
+
+	var cardTwo *canvas.Image
+	if cardTwoName != nil {
+		cardTwo = canvas.NewImageFromFile("media/svg_playing_cards/fronts/png_96_dpi/" + *cardTwoName + ".png")
+		cardTwo.FillMode = canvas.ImageFillOriginal
+	} else {
+		cardTwo = canvas.NewImageFromFile("media/svg_playing_cards/backs/png_96_dpi/red.png")
+		cardTwo.FillMode = canvas.ImageFillOriginal
+	}
+
+	var cardThree *canvas.Image
+	if cardThreeName != nil {
+		cardThree = canvas.NewImageFromFile("media/svg_playing_cards/fronts/png_96_dpi/" + *cardThreeName + ".png")
+		cardThree.FillMode = canvas.ImageFillOriginal
+	} else {
+		cardThree = canvas.NewImageFromFile("media/svg_playing_cards/backs/png_96_dpi/red.png")
+		cardThree.FillMode = canvas.ImageFillOriginal
+	}
+
+	var cardFour *canvas.Image
+	if cardFourName != nil {
+		cardFour = canvas.NewImageFromFile("media/svg_playing_cards/fronts/png_96_dpi/" + *cardFourName + ".png")
+		cardFour.FillMode = canvas.ImageFillOriginal
+	} else {
+		cardFour = canvas.NewImageFromFile("media/svg_playing_cards/backs/png_96_dpi/red.png")
+		cardFour.FillMode = canvas.ImageFillOriginal
+	}
+
+	var cardFive *canvas.Image
+	if cardFiveName != nil {
+		cardFive = canvas.NewImageFromFile("media/svg_playing_cards/fronts/png_96_dpi/" + *cardFourName + ".png")
+		cardFive.FillMode = canvas.ImageFillOriginal
+	} else {
+		cardFive = canvas.NewImageFromFile("media/svg_playing_cards/backs/png_96_dpi/red.png")
+		cardFive.FillMode = canvas.ImageFillOriginal
+	}
+
+	newBoard := make([]*canvas.Image, 0, 5)
+	newBoard = append(newBoard, cardOne, cardTwo, cardThree, cardFour, cardFive)
+	channelmanager.TGUI_BoardChan <- newBoard
+}
+
+func (p *GokerPeer) GetKeyPayloadForFlop() string {
+	var keys []string
+
+	numOfPlayers := p.gameState.GetNumberOfPlayers()
+
+	cardOneKey := p.Keyring.GetVariationKeyForCard(p.Deck.GetCardFromRoundDeck((numOfPlayers * 2) + 1).VariationIndex)
+	cardTwoKey := p.Keyring.GetVariationKeyForCard(p.Deck.GetCardFromRoundDeck((numOfPlayers * 2) + 2).VariationIndex)
+	cardThreeKey := p.Keyring.GetVariationKeyForCard(p.Deck.GetCardFromRoundDeck((numOfPlayers * 2) + 3).VariationIndex)
+
+	if cardOneKey == nil || cardTwoKey == nil || cardThreeKey == nil {
+		log.Fatalf("error: Could not retrieve key for cards")
+	}
+	keys = append(keys, cardOneKey.String(), cardTwoKey.String(), cardThreeKey.String())
+
+	if len(keys) != 3 {
+		log.Println("warning: No matching hand found for peer")
+	}
+
+	return strings.Join(keys, "\n")
+}
+
+func (p *GokerPeer) GetKeyPayloadForTurn() string {
+	numOfPlayers := p.gameState.GetNumberOfPlayers()
+
+	turnKey := p.Keyring.GetVariationKeyForCard(p.Deck.GetCardFromRoundDeck((numOfPlayers * 2) + 4).VariationIndex)
+
+	if turnKey == nil {
+		log.Fatalf("error: Could not retrieve key for cards")
+	}
+
+	return turnKey.String()
+}
+
+func (p *GokerPeer) GetKeyPayloadForRiver() string {
+	numOfPlayers := p.gameState.GetNumberOfPlayers()
+
+	riverKey := p.Keyring.GetVariationKeyForCard(p.Deck.GetCardFromRoundDeck((numOfPlayers * 2) + 5).VariationIndex)
+
+	if riverKey == nil {
+		log.Fatalf("error: Could not retrieve key for cards")
+	}
+
+	return riverKey.String()
+}
+
+func (p *GokerPeer) DecryptTurn(turnKeys []string) {
+	for _, key := range turnKeys {
+		turnKey, success := new(big.Int).SetString(key, 10)
+		if !success {
+			log.Println("DecryptTurn: error: Unable to convert string to big.Int")
+			return
+		}
+		p.Keyring.DecryptWithKey(p.Turn.CardValue, turnKey)
+	}
+
+	err := p.Keyring.DecryptWithVariation(p.Turn.CardValue, p.Turn.VariationIndex)
+	if err != nil {
+		return
+	}
+}
+
+func (p *GokerPeer) DecryptRiver(riverKeys []string) {
+	for _, key := range riverKeys {
+		riverKey, success := new(big.Int).SetString(key, 10)
+		if !success {
+			log.Println("DecryptRiver: error: Unable to convert string to big.Int")
+			return
+		}
+		p.Keyring.DecryptWithKey(p.River.CardValue, riverKey)
+	}
+
+	err := p.Keyring.DecryptWithVariation(p.River.CardValue, p.River.VariationIndex)
+	if err != nil {
+		return
 	}
 }

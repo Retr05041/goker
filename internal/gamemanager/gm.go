@@ -6,6 +6,7 @@ import (
 	"goker/internal/gamestate"
 	"goker/internal/gui"
 	"goker/internal/p2p"
+	"log"
 
 	"fyne.io/fyne/v2/canvas"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -25,6 +26,8 @@ func (gm *GameManager) StartGame() {
 	channelmanager.Init()
 
 	go gm.listenForActions()
+
+	go gm.phaseListener()
 
 	gui.Init()
 }
@@ -80,7 +83,8 @@ func (gm *GameManager) listenForActions() {
 				gm.network.ExecuteCommand(&p2p.BroadcastDeck{})
 
 				// Setup hands
-				gm.network.ExecuteCommand(&p2p.DealCommand{}) // Deals hands one player at at time
+				gm.network.ExecuteCommand(&p2p.CanRequestHand{}) // Deals hands one player at at time
+				gm.network.ExecuteCommand(&p2p.RequestHandCommand{})
 
 				// TODO:
 				//gm.network.ExecuteCommand(&p2p.KeyExchangeCommand{}) // Everyone sends each others timelocked payload to each other and they all begin to crack it
@@ -97,7 +101,7 @@ func (gm *GameManager) listenForActions() {
 				gm.state.PlayerRaise(gm.state.Me, givenAction.DataF)
 				// Send to others
 				gm.network.ExecuteCommand(&p2p.RaiseCommand{})
-				// Update GUI
+
 				gm.state.NextTurn()
 			case "Call":
 				if !gm.state.IsMyTurn() {
@@ -110,7 +114,7 @@ func (gm *GameManager) listenForActions() {
 				gm.state.PlayerCall(gm.state.Me)
 				// Others
 				gm.network.ExecuteCommand(&p2p.CallCommand{})
-				// Update GUI
+
 				gm.state.NextTurn()
 			case "Check":
 				if !gm.state.IsMyTurn() {
@@ -122,6 +126,7 @@ func (gm *GameManager) listenForActions() {
 				gm.state.PlayerCheck(gm.state.Me)
 				// Others
 				gm.network.ExecuteCommand(&p2p.CheckCommand{})
+
 				gm.state.NextTurn() // Skip your turn for now
 			case "Fold":
 				if !gm.state.IsMyTurn() {
@@ -136,5 +141,35 @@ func (gm *GameManager) listenForActions() {
 				gm.state.NextTurn() // Move to next person
 			}
 		}
+	}
+}
+
+func (gm *GameManager) phaseListener() {
+	for {
+		<-channelmanager.TGM_PhaseCheck
+		gm.state.MyBet = 0
+		for key := range gm.state.PlayedThisPhase {
+			gm.state.PlayedThisPhase[key] = false
+		}
+		for key := range gm.state.PhaseBets {
+			gm.state.PhaseBets[key] = 0.0
+		}
+
+		// (e.g., "preflop", "flop", "turn", "river")
+		switch gm.state.Phase {
+		case "preflop":
+			gm.state.Phase = "flop"
+			gm.network.ExecuteCommand(&p2p.RequestFlop{})
+		case "flop":
+			gm.state.Phase = "turn"
+			gm.network.ExecuteCommand(&p2p.RequestTurn{})
+		case "turn":
+			gm.state.Phase = "river"
+			gm.network.ExecuteCommand(&p2p.RequestRiver{})
+		case "river":
+			log.Println("Round over!")
+			gm.state.EndRound()
+		}
+		fmt.Println("CURRENT PHASE: " + gm.state.Phase)
 	}
 }

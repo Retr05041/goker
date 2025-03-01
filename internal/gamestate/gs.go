@@ -305,9 +305,8 @@ func (gs *GameState) NextTurn() {
 		}
 	}
 	if phaseSwitch {
-		gs.NextPhase()
+		channelmanager.TGM_PhaseCheck <- struct{}{} // Tell gm to switch phases
 	}
-
 	// Modular arithmetic to wrap around
 	nextValidPlayer := (gs.WhosTurn + 1) % len(gs.Players)
 
@@ -323,30 +322,6 @@ func (gs *GameState) NextTurn() {
 
 func (gs *GameState) IsMyTurn() bool {
 	return gs.Me == gs.TurnOrder[gs.WhosTurn]
-}
-
-func (gs *GameState) NextPhase() {
-	gs.MyBet = 0
-	for key := range gs.PlayedThisPhase {
-		gs.PlayedThisPhase[key] = false
-	}
-	for key := range gs.PhaseBets {
-		gs.PhaseBets[key] = 0.0
-	}
-
-	// (e.g., "preflop", "flop", "turn", "river")
-	switch gs.Phase {
-	case "preflop":
-		gs.Phase = "flop"
-	case "flop":
-		gs.Phase = "turn"
-	case "turn":
-		gs.Phase = "river"
-	case "river":
-		log.Println("Round over!")
-		gs.EndRound()
-	}
-	fmt.Println("CURRENT PHASE: " + gs.Phase)
 }
 
 func (gs *GameState) PlayerCheck(peerID peer.ID) {
