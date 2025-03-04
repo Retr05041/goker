@@ -28,6 +28,7 @@ var (
 	TNET_ActionChan chan ActionType
 
 	TGM_PhaseCheck chan struct{} // Used when switching turns, will make gm check if there is a phase shift needed
+	TGM_EndRound   chan struct{} // For state telling the GM that this round is over and to reset and move to next round
 )
 
 // Actions made by the user on the GUI
@@ -70,4 +71,5 @@ func Init() {
 	TNET_ActionChan = make(chan ActionType)
 
 	TGM_PhaseCheck = make(chan struct{})
+	TGM_EndRound = make(chan struct{})
 }

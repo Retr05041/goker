@@ -98,7 +98,7 @@ func (p *GokerPeer) handleStream(stream network.Stream) {
 		p.RespondToCommand(&ProtocolSecondStepCommand{}, stream)
 	case "BroadcastDeck": // Final shuffled deck
 		p.Deck.SetDeckInPlace(nCmd.Payload.(string))
-		p.SetMyHand()
+		p.SetHands()
 		p.SetBoard()
 		p.RespondToCommand(&BroadcastDeck{}, stream)
 	case "CanRequestHand":
@@ -129,6 +129,8 @@ func (p *GokerPeer) handleStream(stream network.Stream) {
 		p.RespondToCommand(&RequestTurn{}, stream)
 	case "RequestRiver":
 		p.RespondToCommand(&RequestRiver{}, stream)
+	case "RequestOthersHand":
+		p.RespondToCommand(&RequestOthersHands{}, stream)
 	default:
 		log.Printf("Unknown Command Recieved: %s\n", nCmd.Command)
 	}
@@ -570,7 +572,7 @@ func (sp *ProtocolSecondStepCommand) Execute(p *GokerPeer) {
 	}
 
 	p.Deck.SetDeckInPlace(command.Payload.(string))
-	p.SetMyHand() // Time to set my own hand
+	p.SetHands() // Time to set my own hand
 	p.SetBoard()
 	log.Println("ProtocolSecondStepCommand: All peers have contributed, continueing...")
 }
@@ -1217,5 +1219,61 @@ func (rr *RequestRiver) Respond(peer *GokerPeer, sendingStream network.Stream) {
 
 	if err := sendCommand(sendingStream, response); err != nil {
 		log.Fatalf("RequestRiver: failed to send keys back to peer: %v", err)
+	}
+}
+
+//////////////////////////////////////////// END ROUND COMMANDS /////////////////////////////////////////////////////
+
+type RequestOthersHands struct{}
+
+func (r *RequestOthersHands) Execute(peer *GokerPeer) {
+	peer.peerListMutex.Lock()
+	defer peer.peerListMutex.Unlock()
+
+	command := NetworkCommand{
+		Command: "RequestOthersHand",
+	}
+
+	for _, peerInfo := range peer.peerList {
+		if peerInfo.ID == peer.ThisHost.ID() {
+			continue
+		}
+
+		stream, err := peer.ThisHost.NewStream(context.Background(), peerInfo.ID, protocolID)
+		if err != nil {
+			log.Printf("RequestHand: Failed to create stream to host %s: %v\n", peerInfo.ID, err)
+			return
+		}
+		defer stream.Close()
+
+		if err := sendCommand(stream, command); err != nil {
+			log.Fatalf("RequestHand: failed to send command to peer %s: %v", peerInfo.ID, err)
+		}
+
+		response, err := receiveResponse(stream)
+		if err != nil {
+			log.Fatalf("RequestHand: failed to recieve response from peer: %s", peerInfo.ID)
+		}
+
+		keyPayload, ok := response.Payload.(string)
+		if !ok {
+			log.Fatalf("RequestHand: invalid response format: expected string, got %T", response.Payload)
+		}
+
+		fmt.Println("GOT OTHERS KEYS: ")
+		fmt.Println(keyPayload)
+		peer.DecryptOthersHand(peerInfo.ID, strings.Split(keyPayload, "\n"))
+	}
+}
+
+func (rh *RequestOthersHands) Respond(peer *GokerPeer, sendingStream network.Stream) {
+	payload := peer.GetKeyPayloadForMyHand()
+	response := NetworkCommand{
+		Command: "RequestOthersHand",
+		Payload: payload,
+	}
+
+	if err := sendCommand(sendingStream, response); err != nil {
+		log.Fatalf("RequestOthersHand: failed to send keys back to peer: %v", err)
 	}
 }

@@ -28,12 +28,13 @@ type GokerPeer struct {
 	peerListMutex sync.Mutex // Mutex for accessing peer map
 
 	// Other
-	Deck    *deckInfo  // Holds all deck logic (cards, deck operations etc.)
-	MyHand  []CardInfo // Holds my hand
-	Flop    []CardInfo // Holds flop
-	Turn    CardInfo
-	River   CardInfo
-	Keyring *sra.Keyring // Holds all encryption logic
+	Deck        *deckInfo // Holds all deck logic (cards, deck operations etc.)
+	OthersHands map[peer.ID][]CardInfo
+	MyHand      []CardInfo // Holds my hand
+	Flop        []CardInfo // Holds flop
+	Turn        CardInfo
+	River       CardInfo
+	Keyring     *sra.Keyring // Holds all encryption logic
 
 	// state given by the game manager
 	gameState *gamestate.GameState
@@ -49,6 +50,7 @@ func (p *GokerPeer) Init(nickname string, hosting bool, givenAddr string, givenS
 	// Setup deck and keyring for later
 	p.Keyring = new(sra.Keyring)
 	p.Deck = new(deckInfo)
+	p.OthersHands = make(map[peer.ID][]CardInfo)
 	// TODO: Make this decided at runtime?
 	p.Deck.GenerateDecks("gokerdecksecretkeyforhashesversion1")
 

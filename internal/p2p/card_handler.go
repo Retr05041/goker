@@ -61,6 +61,23 @@ func (d *deckInfo) GenerateDecks(key string) {
 	}
 	d.ReferenceDeck = newRefDeck
 	d.RoundDeck = newRoundDeck
+	if !d.verifyUniqueHashes() {
+		log.Fatalf("Did not generate a good deck.")
+	}
+}
+
+func (d *deckInfo) verifyUniqueHashes() bool {
+	hashSet := make(map[string]bool, len(d.ReferenceDeck))
+
+	for cardName, cardHash := range d.ReferenceDeck {
+		hashStr := cardHash.String()
+		if hashSet[hashStr] {
+			log.Printf("Duplicate hash found for card: %s (hash: %s)\n", cardName, hashStr)
+			return false
+		}
+		hashSet[hashStr] = true
+	}
+	return true
 }
 
 // Shuffle the round deck
@@ -185,20 +202,19 @@ func (p *GokerPeer) GetKeyPayloadForPlayersHand(peerID peer.ID) string {
 	return strings.Join(keys, "\n")
 }
 
-func (p *GokerPeer) SetMyHand() {
+func (p *GokerPeer) SetHands() {
 	IDs := p.gameState.GetTurnOrder()
 
 	for i, id := range IDs {
+		cardOne := p.Deck.GetCardFromRoundDeck(i)
+		cardTwo := p.Deck.GetCardFromRoundDeck(len(IDs) + i)
+		if cardOne.CardValue == nil || cardTwo.CardValue == nil {
+			log.Fatalf("error: Could not set my hand, missing cardOne or cardTwo\n")
+		}
 		if id == p.ThisHost.ID() { // put this host in another place
-			cardOne := p.Deck.GetCardFromRoundDeck(i)
-			cardTwo := p.Deck.GetCardFromRoundDeck(len(IDs) + i)
-
-			if cardOne.CardValue == nil || cardTwo.CardValue == nil {
-				log.Fatalf("error: Could not set my hand, missing cardOne or cardTwo\n")
-			}
-
 			p.MyHand = []CardInfo{cardOne, cardTwo}
-			break
+		} else {
+			p.OthersHands[id] = []CardInfo{cardOne, cardTwo}
 		}
 	}
 }
@@ -365,7 +381,7 @@ func (p *GokerPeer) sendBoardToGUI(cardOneName, cardTwoName, cardThreeName, card
 
 	var cardFive *canvas.Image
 	if cardFiveName != nil {
-		cardFive = canvas.NewImageFromFile("media/svg_playing_cards/fronts/png_96_dpi/" + *cardFourName + ".png")
+		cardFive = canvas.NewImageFromFile("media/svg_playing_cards/fronts/png_96_dpi/" + *cardFiveName + ".png")
 		cardFive.FillMode = canvas.ImageFillOriginal
 	} else {
 		cardFive = canvas.NewImageFromFile("media/svg_playing_cards/backs/png_96_dpi/red.png")
@@ -452,4 +468,49 @@ func (p *GokerPeer) DecryptRiver(riverKeys []string) {
 	if err != nil {
 		return
 	}
+}
+
+func (p *GokerPeer) DecryptOthersHand(peerID peer.ID, keys []string) {
+	// Ensure the peer exists in OthersHands
+	if _, exists := p.OthersHands[peerID]; !exists {
+		fmt.Println("Peer not found in OthersHands")
+		return
+	}
+
+	// Ensure we have the correct number of keys
+	if len(keys) != len(p.OthersHands[peerID]) {
+		fmt.Println("Mismatch between number of keys and encrypted cards")
+		return
+	}
+
+	// Iterate through each card and decrypt
+	for i := range p.OthersHands[peerID] {
+		keyForCard, success := new(big.Int).SetString(keys[i], 10)
+		if !success {
+			log.Println("DecryptRiver: error: Unable to convert string to big.Int")
+			return
+		}
+		p.Keyring.DecryptWithKey(p.OthersHands[peerID][i].CardValue, keyForCard)
+	}
+
+	p.Keyring.DecryptWithVariation(p.OthersHands[peerID][0].CardValue, p.OthersHands[peerID][0].VariationIndex)
+	p.Keyring.DecryptWithVariation(p.OthersHands[peerID][1].CardValue, p.OthersHands[peerID][1].VariationIndex)
+}
+
+func (p *GokerPeer) GetKeyPayloadForMyHand() string {
+	var keys []string
+
+	cardOneKey := p.Keyring.GetVariationKeyForCard(p.MyHand[0].VariationIndex)
+	cardTwoKey := p.Keyring.GetVariationKeyForCard(p.MyHand[1].VariationIndex)
+
+	if cardOneKey == nil || cardTwoKey == nil {
+		log.Fatalf("error: Could not retrieve key for cards")
+	}
+	keys = append(keys, cardOneKey.String(), cardTwoKey.String())
+
+	if len(keys) != 2 {
+		log.Println("warning: No matching hand found for peer")
+	}
+
+	return strings.Join(keys, "\n")
 }

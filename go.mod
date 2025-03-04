@@ -4,6 +4,7 @@ go 1.23.2
 
 require (
 	fyne.io/fyne/v2 v2.5.2
+	github.com/chehsunliu/poker v0.1.0
 	github.com/libp2p/go-libp2p v0.36.5
 	github.com/multiformats/go-multiaddr v0.13.0
 )

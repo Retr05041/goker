@@ -328,7 +328,14 @@ func (gs *GameState) PlayerCheck(peerID peer.ID) {
 	gs.PlayedThisPhase[peerID] = true
 }
 
-// This will be called when all phases have been done, or if there is only 1 person left at the table
+// The gamestate will call this so the game manager can reset everything and begin the next round
 func (gs *GameState) EndRound() {
+	fmt.Println("EndRound called")
+	select {
+	case channelmanager.TGM_EndRound <- struct{}{}:
+		fmt.Println("Signal sent to TGM_EndRound")
+	default:
+		fmt.Println("Failed to send signal to TGM_EndRound (channel full or blocked)")
+	}
 	channelmanager.TGUI_EndRound <- struct{}{}
 }

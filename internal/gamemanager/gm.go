@@ -29,6 +29,8 @@ func (gm *GameManager) StartGame() {
 
 	go gm.phaseListener()
 
+	go gm.roundChanger()
+
 	gui.Init()
 }
 
@@ -39,7 +41,6 @@ func (gm *GameManager) listenForActions() {
 		case givenAction := <-channelmanager.FGUI_ActionChan:
 			switch givenAction.Action {
 			case "Init": // Initialise everything
-				gm.initHand()
 				gm.initBoard()
 				gm.state = new(gamestate.GameState)
 			case "hostOrConnectPressed": // Weather you are hosting or connecting this is called
@@ -155,21 +156,30 @@ func (gm *GameManager) phaseListener() {
 			gm.state.PhaseBets[key] = 0.0
 		}
 
-		// (e.g., "preflop", "flop", "turn", "river")
 		switch gm.state.Phase {
 		case "preflop":
 			gm.state.Phase = "flop"
 			gm.network.ExecuteCommand(&p2p.RequestFlop{})
+			fmt.Println("CURRENT PHASE: " + gm.state.Phase)
 		case "flop":
 			gm.state.Phase = "turn"
 			gm.network.ExecuteCommand(&p2p.RequestTurn{})
+			fmt.Println("CURRENT PHASE: " + gm.state.Phase)
 		case "turn":
 			gm.state.Phase = "river"
 			gm.network.ExecuteCommand(&p2p.RequestRiver{})
+			fmt.Println("CURRENT PHASE: " + gm.state.Phase)
 		case "river":
-			log.Println("Round over!")
+			log.Println("Round over! Determining winner and starting new round!")
+			gm.network.ExecuteCommand(&p2p.RequestOthersHands{})
 			gm.state.EndRound()
 		}
-		fmt.Println("CURRENT PHASE: " + gm.state.Phase)
+	}
+}
+
+func (gm *GameManager) roundChanger() {
+	for {
+		<-channelmanager.TGM_EndRound
+		gm.EvaluateHands()
 	}
 }
