@@ -1260,8 +1260,6 @@ func (r *RequestOthersHands) Execute(peer *GokerPeer) {
 			log.Fatalf("RequestHand: invalid response format: expected string, got %T", response.Payload)
 		}
 
-		fmt.Println("GOT OTHERS KEYS: ")
-		fmt.Println(keyPayload)
 		peer.DecryptOthersHand(peerInfo.ID, strings.Split(keyPayload, "\n"))
 	}
 }

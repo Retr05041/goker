@@ -3,11 +3,12 @@ package gamemanager
 import (
 	"fmt"
 	"goker/internal/channelmanager"
+	"goker/internal/p2p"
 	"log"
 	"strings"
 
 	"fyne.io/fyne/v2/canvas"
-	//"github.com/chehsunliu/poker"
+	"github.com/chehsunliu/poker"
 )
 
 // Setup board with back of cards
@@ -23,33 +24,66 @@ func (gm *GameManager) initBoard() {
 }
 
 func (gm *GameManager) EvaluateHands() {
-
-	for id := range gm.state.Players {
-		if id == gm.state.Me {
-			continue
-		}
-		hand, exists := gm.network.OthersHands[id]
-		if !exists || len(hand) == 0 {
-			log.Printf("Error: No cards found for peer %s in OthersHands", id)
-			return
-		}
-		cardOneName, exists := gm.network.Deck.GetCardFromRefDeck(hand[0].CardValue)
-		cardTwoName, exists1 := gm.network.Deck.GetCardFromRefDeck(hand[1].CardValue)
-		if exists && exists1 {
-			fmt.Println(gm.state.Players[id] + " cards: " + cardOneName + ", " + cardTwoName)
-		}
-
+	flopCardOne, flop1Exists := gm.network.Deck.GetCardFromRefDeck(gm.network.Flop[0].CardValue)
+	flopCardTwo, flop2Exists := gm.network.Deck.GetCardFromRefDeck(gm.network.Flop[1].CardValue)
+	flopCardThree, flop3Exists := gm.network.Deck.GetCardFromRefDeck(gm.network.Flop[2].CardValue)
+	if !(flop1Exists && flop2Exists && flop3Exists) {
+		fmt.Println("flop cards didn't exist.")
 	}
 
-	// TODO: Implement
-	//deck := poker.NewDeck()
-	//var hands map[peer.ID][]poker.Card
-	//hands = make(map[peer.ID][]poker.Card)
-	//fmt.Println(hand)
+	turnCard, turnExists := gm.network.Deck.GetCardFromRefDeck(gm.network.Turn.CardValue)
+	if !turnExists {
+		fmt.Println("turn card didn't exist.")
+	}
 
-	//rank := poker.Evaluate(hand)
-	//fmt.Println(rank)
-	//fmt.Println(poker.RankString(rank))
+	riverCard, riverExists := gm.network.Deck.GetCardFromRefDeck(gm.network.River.CardValue)
+	if !riverExists {
+		fmt.Println("river card didn't exist.")
+	}
+
+	var bestPlayer string
+	var bestRank int32
+	bestRank = 10000 // Since the lower the rank the better the hand
+
+	IDs := gm.state.GetTurnOrder()
+	for _, id := range IDs {
+		var hand []p2p.CardInfo
+		if id == gm.network.ThisHost.ID() {
+			hand = gm.network.MyHand
+			if len(hand) != 2 {
+				log.Println("Error: No cards found for me!")
+				return
+			}
+		} else {
+			OthersHand, exists := gm.network.OthersHands[id]
+			if !exists || len(OthersHand) == 0 {
+				log.Printf("Error: No cards found for peer %s in OthersHands", id)
+				return
+			}
+			hand = OthersHand
+		}
+
+		// Calc best hand
+		cardOneName, exists := gm.network.Deck.GetCardFromRefDeck(hand[0].CardValue)
+		cardTwoName, exists1 := gm.network.Deck.GetCardFromRefDeck(hand[1].CardValue)
+		fullHand := []string{flopCardOne, flopCardTwo, flopCardThree, turnCard, riverCard, cardOneName, cardTwoName}
+		fmt.Println(fullHand)
+
+		if exists && exists1 {
+			currHand := convertMyCardStringsToLibrarys(fullHand)
+			rank := poker.Evaluate(currHand)
+			if rank < bestRank {
+				bestPlayer = gm.state.Players[id]
+				bestRank = rank
+			}
+			fmt.Println(gm.state.Players[id] + " got " + poker.RankString(rank))
+		} else {
+			fmt.Println(gm.state.Players[id] + " cards didn't exist.")
+		}
+	}
+
+	fmt.Print(bestPlayer + " won with: ")
+	fmt.Println(poker.RankString(bestRank))
 }
 
 var suitMap = map[string]byte{
@@ -64,8 +98,8 @@ var rankMap = map[string]string{
 	"jack": "J", "queen": "Q", "king": "K", "ace": "A",
 }
 
-func convertMyCardStringsToLibrarys(myCardStrings []string) string {
-	var converted []string
+func convertMyCardStringsToLibrarys(myCardStrings []string) []poker.Card {
+	var converted []poker.Card
 	for _, card := range myCardStrings {
 		parts := strings.Split(card, "_")
 		if len(parts) != 2 {
@@ -74,8 +108,9 @@ func convertMyCardStringsToLibrarys(myCardStrings []string) string {
 		suit, suitExists := suitMap[parts[0]]
 		rank, rankExists := rankMap[parts[1]]
 		if suitExists && rankExists {
-			converted = append(converted, fmt.Sprintf("%s%c", rank, suit))
+			converted = append(converted, poker.NewCard(fmt.Sprintf("%s%c", rank, suit)))
 		}
 	}
-	return strings.Join(converted, " ")
+
+	return converted
 }

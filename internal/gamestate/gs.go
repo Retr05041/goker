@@ -330,12 +330,6 @@ func (gs *GameState) PlayerCheck(peerID peer.ID) {
 
 // The gamestate will call this so the game manager can reset everything and begin the next round
 func (gs *GameState) EndRound() {
-	fmt.Println("EndRound called")
-	select {
-	case channelmanager.TGM_EndRound <- struct{}{}:
-		fmt.Println("Signal sent to TGM_EndRound")
-	default:
-		fmt.Println("Failed to send signal to TGM_EndRound (channel full or blocked)")
-	}
-	channelmanager.TGUI_EndRound <- struct{}{}
+	channelmanager.TGM_EndRound <- struct{}{}
+	//channelmanager.TGUI_EndRound <- struct{}{}
 }

@@ -27,6 +27,7 @@ type CardInfo struct {
 	index          int
 	VariationIndex int
 	CardValue      *big.Int
+	CardKeys       []string // This will hold they keys used to decrypt this card..
 }
 
 var ranks = [...]string{"ace", "2", "3", "4", "5", "6", "7", "8", "9", "10", "jack", "queen", "king"}
@@ -221,6 +222,12 @@ func (p *GokerPeer) SetHands() {
 
 // Decrypts my hand in the hands array given to key strings
 func (p *GokerPeer) DecryptMyHand(cardOneKeys []string, cardTwoKeys []string) {
+	myKeyOne := p.Keyring.GetVariationKeyForCard(p.MyHand[0].VariationIndex)
+	myKeyTwo := p.Keyring.GetVariationKeyForCard(p.MyHand[1].VariationIndex)
+
+	cardOneKeys = append(cardOneKeys, myKeyOne.String())
+	cardTwoKeys = append(cardTwoKeys, myKeyTwo.String())
+
 	// Decrypt card one
 	for _, key := range cardOneKeys {
 		keyOne, success := new(big.Int).SetString(key, 10)
@@ -228,9 +235,9 @@ func (p *GokerPeer) DecryptMyHand(cardOneKeys []string, cardTwoKeys []string) {
 			log.Println("DecryptMyHand: error: Unable to convert string to big.Int")
 			return
 		}
-		//log.Printf("Decrypting Card 1: %s\n with Key: %s\n", p.MyHand.Hand[0].CardValue.String(), keyOne.String())
 		p.Keyring.DecryptWithKey(p.MyHand[0].CardValue, keyOne)
 	}
+	p.MyHand[0].CardKeys = cardOneKeys // Save the keys for later
 
 	// Decrypt card two
 	for _, key := range cardTwoKeys {
@@ -241,16 +248,11 @@ func (p *GokerPeer) DecryptMyHand(cardOneKeys []string, cardTwoKeys []string) {
 		}
 		p.Keyring.DecryptWithKey(p.MyHand[1].CardValue, keyTwo)
 	}
+	p.MyHand[1].CardKeys = cardTwoKeys // Save the keys for later
 
-	err := p.Keyring.DecryptWithVariation(p.MyHand[0].CardValue, p.MyHand[0].VariationIndex)
-	if err != nil {
-		return
-	}
-
-	err = p.Keyring.DecryptWithVariation(p.MyHand[1].CardValue, p.MyHand[1].VariationIndex)
-	if err != nil {
-		return
-	}
+	fmt.Println("My keys for my cards: ")
+	fmt.Println(p.MyHand[0].CardKeys)
+	fmt.Println(p.MyHand[1].CardKeys)
 }
 
 // Load images for my hand and send them to GUI
@@ -477,40 +479,48 @@ func (p *GokerPeer) DecryptOthersHand(peerID peer.ID, keys []string) {
 		return
 	}
 
-	// Ensure we have the correct number of keys
-	if len(keys) != len(p.OthersHands[peerID]) {
-		fmt.Println("Mismatch between number of keys and encrypted cards")
+	// Split keys into two sets (first half for card one, second half for card two)
+	n := len(keys) / 2
+	if len(keys)%2 != 0 || n == 0 {
+		fmt.Println("Invalid number of keys provided")
 		return
 	}
 
-	// Iterate through each card and decrypt
-	for i := range p.OthersHands[peerID] {
-		keyForCard, success := new(big.Int).SetString(keys[i], 10)
+	cardOneKeys := keys[:n]
+	cardTwoKeys := keys[n:]
+
+	// Decrypt card one
+	for _, keyStr := range cardOneKeys {
+		key, success := new(big.Int).SetString(keyStr, 10)
 		if !success {
-			log.Println("DecryptRiver: error: Unable to convert string to big.Int")
+			log.Println("DecryptOthersHand: error: Unable to convert string to big.Int")
 			return
 		}
-		p.Keyring.DecryptWithKey(p.OthersHands[peerID][i].CardValue, keyForCard)
+		p.Keyring.DecryptWithKey(p.OthersHands[peerID][0].CardValue, key)
 	}
+	p.OthersHands[peerID][0].CardKeys = cardOneKeys
 
-	p.Keyring.DecryptWithVariation(p.OthersHands[peerID][0].CardValue, p.OthersHands[peerID][0].VariationIndex)
-	p.Keyring.DecryptWithVariation(p.OthersHands[peerID][1].CardValue, p.OthersHands[peerID][1].VariationIndex)
+	// Decrypt card two
+	for _, keyStr := range cardTwoKeys {
+		key, success := new(big.Int).SetString(keyStr, 10)
+		if !success {
+			log.Println("DecryptOthersHand: error: Unable to convert string to big.Int")
+			return
+		}
+		p.Keyring.DecryptWithKey(p.OthersHands[peerID][1].CardValue, key)
+	}
+	p.OthersHands[peerID][1].CardKeys = cardTwoKeys
 }
 
 func (p *GokerPeer) GetKeyPayloadForMyHand() string {
-	var keys []string
+	var allKeys []string
 
-	cardOneKey := p.Keyring.GetVariationKeyForCard(p.MyHand[0].VariationIndex)
-	cardTwoKey := p.Keyring.GetVariationKeyForCard(p.MyHand[1].VariationIndex)
-
-	if cardOneKey == nil || cardTwoKey == nil {
-		log.Fatalf("error: Could not retrieve key for cards")
-	}
-	keys = append(keys, cardOneKey.String(), cardTwoKey.String())
-
-	if len(keys) != 2 {
-		log.Println("warning: No matching hand found for peer")
+	if p.MyHand[0].CardKeys == nil || p.MyHand[1].CardKeys == nil {
+		log.Fatalf("error: Could not retrieve keys for cards")
 	}
 
-	return strings.Join(keys, "\n")
+	allKeys = append(allKeys, p.MyHand[0].CardKeys...)
+	allKeys = append(allKeys, p.MyHand[1].CardKeys...)
+
+	return strings.Join(allKeys, "\n")
 }
