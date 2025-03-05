@@ -27,8 +27,9 @@ var (
 	// Game state to be sent from game manager to network - Singular channels will be used to communicate with GUI
 	TNET_ActionChan chan ActionType
 
-	TGM_PhaseCheck chan struct{} // Used when switching turns, will make gm check if there is a phase shift needed
-	TGM_EndRound   chan struct{} // For state telling the GM that this round is over and to reset and move to next round
+	TGM_PhaseCheck      chan struct{} // Used when switching turns, will make gm check if there is a phase shift needed
+	TGM_EndRound        chan struct{} // For state telling the GM that this round is over and to reset and move to next round
+	TGS_PhaseSwitchDone chan struct{} // For the GM to tell the GS to continue with the "Next Turn" as the phase has been switched
 )
 
 // Actions made by the user on the GUI
@@ -72,4 +73,5 @@ func Init() {
 
 	TGM_PhaseCheck = make(chan struct{})
 	TGM_EndRound = make(chan struct{})
+	TGS_PhaseSwitchDone = make(chan struct{})
 }

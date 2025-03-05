@@ -49,38 +49,40 @@ func (gm *GameManager) EvaluateHands() {
 
 	IDs := gm.state.GetTurnOrder()
 	for _, id := range IDs {
-		var hand []p2p.CardInfo
-		if id == gm.network.ThisHost.ID() {
-			hand = gm.network.MyHand
-			if len(hand) != 2 {
-				log.Println("Error: No cards found for me!")
-				return
+		if !gm.state.FoldedPlayers[id] { // Don't want to add folded players to our check
+			var hand []p2p.CardInfo
+			if id == gm.network.ThisHost.ID() {
+				hand = gm.network.MyHand
+				if len(hand) != 2 {
+					log.Println("Error: No cards found for me!")
+					return
+				}
+			} else {
+				OthersHand, exists := gm.network.OthersHands[id]
+				if !exists || len(OthersHand) == 0 {
+					log.Printf("Error: No cards found for peer %s in OthersHands", id)
+					return
+				}
+				hand = OthersHand
 			}
-		} else {
-			OthersHand, exists := gm.network.OthersHands[id]
-			if !exists || len(OthersHand) == 0 {
-				log.Printf("Error: No cards found for peer %s in OthersHands", id)
-				return
-			}
-			hand = OthersHand
-		}
 
-		// Calc best hand
-		cardOneName, exists := gm.network.Deck.GetCardFromRefDeck(hand[0].CardValue)
-		cardTwoName, exists1 := gm.network.Deck.GetCardFromRefDeck(hand[1].CardValue)
-		fullHand := []string{flopCardOne, flopCardTwo, flopCardThree, turnCard, riverCard, cardOneName, cardTwoName}
-		fmt.Println(fullHand)
+			// Calc best hand
+			cardOneName, exists := gm.network.Deck.GetCardFromRefDeck(hand[0].CardValue)
+			cardTwoName, exists1 := gm.network.Deck.GetCardFromRefDeck(hand[1].CardValue)
+			fullHand := []string{flopCardOne, flopCardTwo, flopCardThree, turnCard, riverCard, cardOneName, cardTwoName}
+			fmt.Println(fullHand)
 
-		if exists && exists1 {
-			currHand := convertMyCardStringsToLibrarys(fullHand)
-			rank := poker.Evaluate(currHand)
-			if rank < bestRank {
-				bestID = id
-				bestRank = rank
+			if exists && exists1 {
+				currHand := convertMyCardStringsToLibrarys(fullHand)
+				rank := poker.Evaluate(currHand)
+				if rank < bestRank {
+					bestID = id
+					bestRank = rank
+				}
+				fmt.Println(gm.state.Players[id] + " got " + poker.RankString(rank))
+			} else {
+				fmt.Println(gm.state.Players[id] + " cards didn't exist.")
 			}
-			fmt.Println(gm.state.Players[id] + " got " + poker.RankString(rank))
-		} else {
-			fmt.Println(gm.state.Players[id] + " cards didn't exist.")
 		}
 	}
 

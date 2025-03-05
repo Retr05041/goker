@@ -314,18 +314,21 @@ func (gs *GameState) NextTurn() {
 	}
 
 	// From all players who haven't folded, if there are any
-	// that haven't played, don't switch the phase
+	// that haven't played OR haven't matched the highest bet so far, don't switch the phase
 	phaseSwitch := true
+	highestBetThisPhase := gs.GetHighestbetThisPhase()
 	for id := range gs.PlayedThisPhase {
 		if !gs.FoldedPlayers[id] {
-			if !gs.PlayedThisPhase[id] {
+			if !gs.PlayedThisPhase[id] || gs.PhaseBets[id] < highestBetThisPhase {
 				phaseSwitch = false
 			}
 		}
 	}
 	if phaseSwitch {
 		channelmanager.TGM_PhaseCheck <- struct{}{} // Tell gm to switch phases
+		<-channelmanager.TGS_PhaseSwitchDone
 	}
+
 	// Modular arithmetic to wrap around
 	nextValidPlayer := (gs.WhosTurn + 1) % len(gs.Players)
 

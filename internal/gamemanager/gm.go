@@ -137,10 +137,11 @@ func (gm *GameManager) phaseListener() {
 		gm.state.MyBet = 0
 
 		for id := range gm.state.PlayedThisPhase {
-			if gm.state.FoldedPlayers[id] { // Skip any folded players
+			if !gm.state.FoldedPlayers[id] { // Skip any folded players
 				gm.state.PlayedThisPhase[id] = false
 			}
 		}
+
 		for id := range gm.state.PhaseBets {
 			gm.state.PhaseBets[id] = 0.0
 		}
@@ -163,6 +164,8 @@ func (gm *GameManager) phaseListener() {
 			gm.network.ExecuteCommand(&p2p.RequestOthersHands{})
 			gm.state.EndRound()
 		}
+
+		channelmanager.TGS_PhaseSwitchDone <- struct{}{} // Continue with the next turn function in GS
 	}
 }
 
