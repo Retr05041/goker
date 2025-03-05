@@ -194,15 +194,33 @@ func (gs *GameState) GetPlayerInfo() channelmanager.PlayerInfo {
 		}
 	}
 
-	return channelmanager.PlayerInfo{Players: players, Money: money, Me: me, HighestBet: gs.GetHighestbetThisPhase(), WhosTurn: whosTurn, MyBetSoFar: gs.MyBet}
+	return channelmanager.PlayerInfo{Players: players, Money: money, Me: me, HighestBet: gs.GetHighestbetThisPhase(), WhosTurn: whosTurn, MyBetsForThisPhase: gs.MyBet}
 }
 
+// GetHighestBetThisPhase will return either the highest someones bet this phase, or 0 if all bets are the same
 func (gs *GameState) GetHighestbetThisPhase() float64 {
-	highestBet := 0.0
+	var highestBet float64
+	allEqual := true
+	var firstBet float64
+	first := true
+
 	for peerID := range gs.Players {
-		if highestBet < gs.PhaseBets[peerID] {
-			highestBet = gs.PhaseBets[peerID]
+		bet := gs.PhaseBets[peerID]
+
+		if first {
+			firstBet = bet
+			first = false
+		} else if bet != firstBet {
+			allEqual = false
 		}
+
+		if bet > highestBet {
+			highestBet = bet
+		}
+	}
+
+	if allEqual {
+		return 0
 	}
 	return highestBet
 }
@@ -271,17 +289,12 @@ func (gs *GameState) PlayerBet(peerID peer.ID, bet float64) {
 
 func (gs *GameState) PlayerRaise(peerID peer.ID, bet float64) {
 	gs.PlayerBet(peerID, bet)
-	for key := range gs.PlayedThisPhase {
-		if gs.PlayedThisPhase[key] {
-			gs.PlayedThisPhase[key] = false // We need to make the others call or raise or fold again
-		}
-	}
-
-	if peerID == gs.Me {
-		gs.PlayedThisPhase[gs.Me] = true
+	for id := range gs.PlayedThisPhase {
+		gs.PlayedThisPhase[id] = false // We need to make the others call or raise or fold again
 	}
 
 	gs.MyBet += bet
+	gs.PlayedThisPhase[peerID] = true // Person who raised did in fact play this round
 }
 
 func (gs *GameState) PlayerCall(peerID peer.ID) {
@@ -292,7 +305,6 @@ func (gs *GameState) PlayerCall(peerID peer.ID) {
 
 func (gs *GameState) PlayerFold(peerID peer.ID) {
 	gs.FoldedPlayers[peerID] = true
-	delete(gs.PlayedThisPhase, peerID) // As he won't be apart of anymore phases
 }
 
 // Determines whos going and will check if the phases need to be switched
@@ -301,10 +313,14 @@ func (gs *GameState) NextTurn() {
 		gs.EndRound()
 	}
 
+	// From all players who haven't folded, if there are any
+	// that haven't played, don't switch the phase
 	phaseSwitch := true
-	for key := range gs.PlayedThisPhase {
-		if !gs.PlayedThisPhase[key] {
-			phaseSwitch = false
+	for id := range gs.PlayedThisPhase {
+		if !gs.FoldedPlayers[id] {
+			if !gs.PlayedThisPhase[id] {
+				phaseSwitch = false
+			}
 		}
 	}
 	if phaseSwitch {
@@ -334,5 +350,4 @@ func (gs *GameState) PlayerCheck(peerID peer.ID) {
 // The gamestate will call this so the game manager can reset everything and begin the next round
 func (gs *GameState) EndRound() {
 	channelmanager.TGM_EndRound <- struct{}{}
-	//channelmanager.TGUI_EndRound <- struct{}{}
 }

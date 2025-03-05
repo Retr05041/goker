@@ -133,12 +133,16 @@ func (gm *GameManager) listenForActions() {
 func (gm *GameManager) phaseListener() {
 	for {
 		<-channelmanager.TGM_PhaseCheck
+
 		gm.state.MyBet = 0
-		for key := range gm.state.PlayedThisPhase {
-			gm.state.PlayedThisPhase[key] = false
+
+		for id := range gm.state.PlayedThisPhase {
+			if gm.state.FoldedPlayers[id] { // Skip any folded players
+				gm.state.PlayedThisPhase[id] = false
+			}
 		}
-		for key := range gm.state.PhaseBets {
-			gm.state.PhaseBets[key] = 0.0
+		for id := range gm.state.PhaseBets {
+			gm.state.PhaseBets[id] = 0.0
 		}
 
 		switch gm.state.Phase {

@@ -28,12 +28,12 @@ var (
 
 	playerCards = container.NewVBox()
 
-	myMoney     = 0.0
-	highestBet  = 0.0
-	myBetsSoFar = 0.0
-	valueLabel  = widget.NewLabel(fmt.Sprintf("$%.0f", 0.0))
-	betSlider   = widget.NewSlider(0, 100)
-	potLabel    = widget.NewLabel(fmt.Sprintf("Pot: $%.0f", 0.0))
+	myMoney            = 0.0
+	highestBet         = 0.0
+	myBetsForThisPhase = 0.0
+	valueLabel         = widget.NewLabel(fmt.Sprintf("$%.0f", 0.0))
+	betSlider          = widget.NewSlider(0, 100)
+	potLabel           = widget.NewLabel(fmt.Sprintf("Pot: $%.0f", 0.0))
 )
 
 func initElements() {
@@ -46,16 +46,20 @@ func initElements() {
 		channelmanager.FGUI_ActionChan <- channelmanager.ActionType{Action: "Fold"}
 	})
 	raiseButton = widget.NewButton("Raise", func() {
-		if (betSlider.Value <= myMoney) && (betSlider.Value+myBetsSoFar > highestBet) {
+		if (betSlider.Value <= myMoney) && ((betSlider.Value+myBetsForThisPhase > highestBet) || (highestBet == 0)) {
 			channelmanager.FGUI_ActionChan <- channelmanager.ActionType{Action: "Raise", DataF: betSlider.Value}
 		}
 	})
 	callButton = widget.NewButton("Call", func() {
-		if highestBet <= myMoney {
+		if (highestBet-myBetsForThisPhase <= myMoney) && (highestBet != 0) { // If the current highest bet is less than my money, we can call
+			highestBet = 0 // In case no one raises after us, we obv don't want to be able to call again
 			channelmanager.FGUI_ActionChan <- channelmanager.ActionType{Action: "Call"}
 		}
 	})
 	checkButton = widget.NewButton("Check", func() {
-		channelmanager.FGUI_ActionChan <- channelmanager.ActionType{Action: "Check"}
+		// Just check.. however I will need to make sure no ones raised yet
+		if highestBet == 0 {
+			channelmanager.FGUI_ActionChan <- channelmanager.ActionType{Action: "Check"}
+		}
 	})
 }

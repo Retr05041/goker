@@ -108,9 +108,6 @@ func updateAddress(addresses []string) {
 func updateCards(playerInfo channelmanager.PlayerInfo) {
 	playerCards.Objects = nil
 
-	highestBet = playerInfo.HighestBet
-	myBetsSoFar = playerInfo.MyBetSoFar
-
 	if playerInfo.Me == playerInfo.WhosTurn {
 		foldButton.Enable()
 		raiseButton.Enable()
@@ -122,6 +119,17 @@ func updateCards(playerInfo channelmanager.PlayerInfo) {
 		callButton.Disable()
 		checkButton.Disable()
 	}
+
+	highestBet = playerInfo.HighestBet
+	if highestBet != 0 {
+		callButton.Enable()
+		checkButton.Disable()
+	} else {
+		callButton.Disable()
+		checkButton.Enable()
+	}
+
+	myBetsForThisPhase = playerInfo.MyBetsForThisPhase
 
 	for playerIndex, playerNickname := range playerInfo.Players {
 		if playerNickname == playerInfo.Me {
