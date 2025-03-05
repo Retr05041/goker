@@ -249,10 +249,6 @@ func (p *GokerPeer) DecryptMyHand(cardOneKeys []string, cardTwoKeys []string) {
 		p.Keyring.DecryptWithKey(p.MyHand[1].CardValue, keyTwo)
 	}
 	p.MyHand[1].CardKeys = cardTwoKeys // Save the keys for later
-
-	fmt.Println("My keys for my cards: ")
-	fmt.Println(p.MyHand[0].CardKeys)
-	fmt.Println(p.MyHand[1].CardKeys)
 }
 
 // Load images for my hand and send them to GUI

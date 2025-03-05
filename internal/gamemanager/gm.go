@@ -42,7 +42,6 @@ func (gm *GameManager) listenForActions() {
 			switch givenAction.Action {
 			case "Init": // Initialise everything
 				gm.initBoard()
-				gm.state = new(gamestate.GameState)
 			case "hostOrConnectPressed": // Weather you are hosting or connecting this is called
 				// Setup network node
 				gm.network = new(p2p.GokerPeer)
@@ -72,21 +71,7 @@ func (gm *GameManager) listenForActions() {
 				// Fill cards in GUI
 				channelmanager.TGUI_PlayerInfo <- gm.state.GetPlayerInfo()
 
-				// Setup keyring for this round
-				gm.network.Keyring.GeneratePQ()
-				gm.network.Keyring.GenerateKeys()
-
-				// Setup deck
-				gm.network.ExecuteCommand(&p2p.SendPQCommand{})            // Send everyone the generated P and Q so they can setup their Keyring
-				gm.network.ExecuteCommand(&p2p.ProtocolFirstStepCommand{}) // Setting up deck pt.1
-				gm.network.ExecuteCommand(&p2p.BroadcastNewDeck{})
-				gm.network.ExecuteCommand(&p2p.ProtocolSecondStepCommand{}) // Setting up deck pt.2 & Sets everyones hands
-				gm.network.ExecuteCommand(&p2p.BroadcastDeck{})
-
-				// Setup hands
-				gm.network.ExecuteCommand(&p2p.CanRequestHand{}) // Deals hands one player at at time
-				gm.network.ExecuteCommand(&p2p.RequestHandCommand{})
-
+				gm.RunProtocol()
 				// TODO:
 				//gm.network.ExecuteCommand(&p2p.KeyExchangeCommand{}) // Everyone sends each others timelocked payload to each other and they all begin to crack it
 

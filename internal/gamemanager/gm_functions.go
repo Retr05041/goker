@@ -9,6 +9,7 @@ import (
 
 	"fyne.io/fyne/v2/canvas"
 	"github.com/chehsunliu/poker"
+	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 // Setup board with back of cards
@@ -41,7 +42,7 @@ func (gm *GameManager) EvaluateHands() {
 		fmt.Println("river card didn't exist.")
 	}
 
-	var bestPlayer string
+	var bestID peer.ID
 	var bestRank int32
 	bestRank = 10000 // Since the lower the rank the better the hand
 
@@ -73,7 +74,7 @@ func (gm *GameManager) EvaluateHands() {
 			currHand := convertMyCardStringsToLibrarys(fullHand)
 			rank := poker.Evaluate(currHand)
 			if rank < bestRank {
-				bestPlayer = gm.state.Players[id]
+				bestID = id
 				bestRank = rank
 			}
 			fmt.Println(gm.state.Players[id] + " got " + poker.RankString(rank))
@@ -82,8 +83,8 @@ func (gm *GameManager) EvaluateHands() {
 		}
 	}
 
-	fmt.Print(bestPlayer + " won with: ")
-	fmt.Println(poker.RankString(bestRank))
+	gm.state.Winner = bestID
+	gm.RestartRound()
 }
 
 var suitMap = map[string]byte{
@@ -113,4 +114,67 @@ func convertMyCardStringsToLibrarys(myCardStrings []string) []poker.Card {
 	}
 
 	return converted
+}
+
+// RestartRound will be called when a game is being played and the round is over.
+// Will distribute pot and reset phase bets and restart the protocol
+func (gm *GameManager) RestartRound() {
+	// Distribute the pot to the winner
+	pot := gm.state.GetCurrentPot()
+	if winner, exists := gm.state.PlayersMoney[gm.state.Winner]; exists {
+		gm.state.PlayersMoney[gm.state.Winner] = winner + pot
+		log.Printf("%s won the pot of %.2f!", gm.state.Players[gm.state.Winner], pot)
+	} else {
+		log.Println("Error: Winner not found in player money map")
+	}
+
+	// Reset round state
+	for id := range gm.state.BetHistory {
+		gm.state.BetHistory[id] = 0.0
+	}
+	for id := range gm.state.FoldedPlayers {
+		gm.state.FoldedPlayers[id] = false
+	}
+	for id := range gm.state.PlayedThisPhase {
+		gm.state.PlayedThisPhase[id] = false
+	}
+	for id := range gm.state.PlayedThisPhase {
+		gm.state.PlayedThisPhase[id] = false
+	}
+	gm.state.MyBet = 0.0
+	gm.state.Phase = "preflop"
+	gm.state.WhosTurn = 0
+	gm.network.OthersHands = make(map[peer.ID][]p2p.CardInfo) // Need to reset this
+
+	// Reinitialize the board
+	gm.initBoard()
+
+	// Notify GUI to update
+	channelmanager.TGUI_PotChan <- 0.0
+	channelmanager.TGUI_PlayerInfo <- gm.state.GetPlayerInfo()
+
+	gm.network.Deck.GenerateDecks("gokerdecksecretkeyforhashesversion1")
+
+	// Start the next round's protocol if you are the host - Host will be first in turn order always
+	if gm.network.ThisHost.ID() == gm.state.TurnOrder[0] {
+		gm.RunProtocol()
+	}
+}
+
+// Run through setting up keyring, shuffling deck, and dealing
+func (gm *GameManager) RunProtocol() {
+	// Setup keyring for this round
+	gm.network.Keyring.GeneratePQ()
+	gm.network.Keyring.GenerateKeys()
+
+	// Setup deck
+	gm.network.ExecuteCommand(&p2p.SendPQCommand{})            // Send everyone the generated P and Q so they can setup their Keyring
+	gm.network.ExecuteCommand(&p2p.ProtocolFirstStepCommand{}) // Setting up deck pt.1
+	gm.network.ExecuteCommand(&p2p.BroadcastNewDeck{})
+	gm.network.ExecuteCommand(&p2p.ProtocolSecondStepCommand{}) // Setting up deck pt.2 & Sets everyones hands
+	gm.network.ExecuteCommand(&p2p.BroadcastDeck{})
+
+	// Setup hands
+	gm.network.ExecuteCommand(&p2p.CanRequestHand{}) // Deals hands one player at at time
+	gm.network.ExecuteCommand(&p2p.RequestHandCommand{})
 }

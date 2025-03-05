@@ -39,10 +39,13 @@ type GameState struct {
 	// Holds weather a player has played this phase - Used to determine when the move to next phase
 	PlayedThisPhase map[peer.ID]bool
 
-	// Table rules (set my host)
+	// Table rules (set by host)
 	StartingCash float64 // Starting cash for all players
 	MinBet       float64 // Minimum bet required for the round (again from table settings)
 	Phase        string  // Current phase of the game (e.g., "preflop", "flop", "turn", "river")
+
+	// Winning player of previous round
+	Winner peer.ID
 }
 
 // Refresh state for new possible rounds
