@@ -14,6 +14,7 @@ import (
 
 // Setup board with back of cards
 func (gm *GameManager) initBoard() {
+	gm.Board = nil
 	for i := 0; i < 5; i++ {
 		cardImage := canvas.NewImageFromFile("media/svg_playing_cards/backs/png_96_dpi/red.png")
 		cardImage.FillMode = canvas.ImageFillOriginal
