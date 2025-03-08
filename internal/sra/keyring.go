@@ -16,7 +16,7 @@ type Keyring struct {
 	keyVariations []*KeyVariation
 
 	// Time locking
-	puzzle         *TimeLock
+	TLP            *TimeLock
 	KeyringPayload string
 }
 
@@ -61,6 +61,7 @@ func (k *Keyring) GenerateKeys() error {
 
 	k.globalPrivateKey, k.globalPublicKey, k.globalN, k.globalPHI = privateKey, publicKey, n, phi
 	k.GenerateKeyVariations(52) // We need to create variations each round, so we will do this on Generate Keys
+	k.GenerateKeyringPayload()  // Get time locked puzzle setup
 	return nil
 }
 

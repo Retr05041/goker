@@ -73,7 +73,7 @@ func (gm *GameManager) listenForActions() {
 
 				gm.RunProtocol()
 				// TODO:
-				//gm.network.ExecuteCommand(&p2p.KeyExchangeCommand{}) // Everyone sends each others timelocked payload to each other and they all begin to crack it
+				gm.network.ExecuteCommand(&p2p.PuzzleExchangeCommand{}) // Everyone sends each others timelocked payload to each other and they all begin to crack it
 
 				gm.network.ExecuteCommand(&p2p.MoveToTableCommand{}) // Tell everyone to move to the game table
 			case "Raise":

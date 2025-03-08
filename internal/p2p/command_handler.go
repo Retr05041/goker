@@ -131,6 +131,8 @@ func (p *GokerPeer) handleStream(stream network.Stream) {
 		p.RespondToCommand(&RequestRiver{}, stream)
 	case "RequestOthersHand":
 		p.RespondToCommand(&RequestOthersHands{}, stream)
+	case "PuzzleExchange":
+		p.RespondToCommand(&PuzzleExchangeCommand{}, stream)
 	default:
 		log.Printf("Unknown Command Recieved: %s\n", nCmd.Command)
 	}
@@ -1269,6 +1271,66 @@ func (rh *RequestOthersHands) Respond(peer *GokerPeer, sendingStream network.Str
 	response := NetworkCommand{
 		Command: "RequestOthersHand",
 		Payload: payload,
+	}
+
+	if err := sendCommand(sendingStream, response); err != nil {
+		log.Fatalf("RequestOthersHand: failed to send keys back to peer: %v", err)
+	}
+}
+
+//////////////////////////////////////////// TLP COMMANDS /////////////////////////////////////////////////////
+
+type PuzzleExchangeCommand struct{}
+
+func (tlp *PuzzleExchangeCommand) Execute(p *GokerPeer) {
+	p.peerListMutex.Lock()
+	defer p.peerListMutex.Unlock()
+
+	command := NetworkCommand{
+		Command: "PuzzleExchange",
+	}
+
+	for _, peerInfo := range p.peerList {
+		if peerInfo.ID == p.ThisHost.ID() {
+			continue
+		}
+
+		stream, err := p.ThisHost.NewStream(context.Background(), peerInfo.ID, protocolID)
+		if err != nil {
+			log.Printf("PuzzleExchange: Failed to create stream to host %s: %v\n", peerInfo.ID, err)
+			return
+		}
+		defer stream.Close()
+
+		if err := sendCommand(stream, command); err != nil {
+			log.Fatalf("PuzzleExchange: failed to send command to peer %s: %v", peerInfo.ID, err)
+		}
+
+		response, err := receiveResponse(stream)
+		if err != nil {
+			log.Fatalf("PuzzleExchange: failed to recieve response from peer: %s", peerInfo.ID)
+		}
+
+		puzzlePayload, ok := response.Payload.(string)
+		if !ok {
+			log.Fatalf("PuzzleExchange: invalid response format: expected string, got %T", response.Payload)
+		}
+
+		go p.Keyring.BreakTimeLockedPuzzle(peerInfo.ID, []byte(puzzlePayload))
+	}
+}
+
+func (tlp *PuzzleExchangeCommand) Respond(p *GokerPeer, sendingStream network.Stream) {
+	p.Keyring.GenerateTimeLockedPuzzle(15) // Make payload 15 seconds... will need to update this
+
+	payload, err := json.Marshal(p.Keyring.TLP)
+	if err != nil {
+		log.Fatalf("failed to serialize time-locked puzzle")
+	}
+
+	response := NetworkCommand{
+		Command: "PuzzleExchange",
+		Payload: string(payload),
 	}
 
 	if err := sendCommand(sendingStream, response); err != nil {

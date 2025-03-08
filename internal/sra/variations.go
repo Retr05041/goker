@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"math/big"
+	"strings"
 )
 
 type KeyVariation struct {
@@ -65,20 +66,21 @@ func (k *Keyring) GetVariationKeyForCard(variationIndex int) *big.Int {
 }
 
 func (k *Keyring) GenerateKeyringPayload() error {
+	var payload []string
 	if k.globalPublicKey == nil || k.globalPrivateKey == nil || k.keyVariations == nil {
 		return fmt.Errorf("error: Missing keys or variations")
 	}
 
 	// Start with global public and private keys
-	payload := fmt.Sprintf("%s\n%s\n", k.globalPublicKey.String(), k.globalPrivateKey.String())
+	payload = append(payload, k.globalPublicKey.String(), k.globalPrivateKey.String())
 
 	// Append each variation's `r` value
 	for _, variation := range k.keyVariations {
 		if variation != nil {
-			payload += fmt.Sprintf("%s\n", variation.variationValue.String())
+			payload = append(payload, variation.variationValue.String())
 		}
 	}
 
-	k.KeyringPayload = payload
+	k.KeyringPayload = strings.Join(payload, "\n")
 	return nil
 }
