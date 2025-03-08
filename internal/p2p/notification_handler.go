@@ -43,7 +43,14 @@ func (p *GokerPeer) handleNotifications() {
 			// Update the GUI
 			channelmanager.FNET_NumOfPlayersChan <- len(p.peerList)
 
+			// Remove the peer from the state
 			p.gameState.RemovePeerFromState(conn.RemotePeer())
+
+			// Update GUI of player leaving
+			channelmanager.TGUI_PlayerInfo <- p.gameState.GetPlayerInfo()
+
+			// End Round - Cannot continue
+			channelmanager.TGM_EndRound <- struct{}{}
 		},
 	})
 

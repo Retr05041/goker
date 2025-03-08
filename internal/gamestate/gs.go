@@ -103,6 +103,7 @@ func (gs *GameState) AddPeerToState(peerID peer.ID, nickname string) {
 	gs.PlayedThisPhase[peerID] = false
 }
 
+// When a player leaves, the round will change
 func (gs *GameState) RemovePeerFromState(peerID peer.ID) {
 	gs.mu.Lock()
 	defer gs.mu.Unlock()
@@ -112,17 +113,31 @@ func (gs *GameState) RemovePeerFromState(peerID peer.ID) {
 		log.Println("RemovePeerFromState: Peer not in state")
 		return
 	}
-	delete(gs.Players, peerID)
 
+	delete(gs.Players, peerID)
 	delete(gs.BetHistory, peerID)
 	delete(gs.FoldedPlayers, peerID)
-
-	_, exists = gs.PlayersMoney[peerID]
-	if !exists {
-		log.Println("RemovePeerFromState: Peer doesn't have money")
-		return
-	}
+	delete(gs.PhaseBets, peerID)
+	delete(gs.PlayedThisPhase, peerID)
 	delete(gs.PlayersMoney, peerID)
+
+	// Remove peer from turn order and reindex turn order
+	newTurnOrder := make(map[int]peer.ID)
+	newIndex := 0
+	for i := 0; i < len(gs.TurnOrder); i++ {
+		if gs.TurnOrder[i] != peerID {
+			newTurnOrder[newIndex] = gs.TurnOrder[i]
+			newIndex++
+		}
+	}
+	gs.TurnOrder = newTurnOrder
+
+	// Adjust current turn if necessary
+	if len(gs.TurnOrder) > 0 {
+		gs.WhosTurn = gs.WhosTurn % len(gs.TurnOrder)
+	} else {
+		gs.WhosTurn = 0
+	}
 }
 
 // Get the current pot from the rounds bet history
@@ -311,6 +326,18 @@ func (gs *GameState) PlayerFold(peerID peer.ID) {
 func (gs *GameState) NextTurn() {
 	if len(gs.Players) == 1 { // If your last sitting at the table, just leave
 		gs.EndRound()
+	}
+
+	// Check if only one player has not folded
+	nonFoldedCount := 0
+	for id := range gs.Players {
+		if !gs.FoldedPlayers[id] {
+			nonFoldedCount++
+		}
+	}
+	if nonFoldedCount == 1 {
+		gs.EndRound()
+		return
 	}
 
 	// From all players who haven't folded, if there are any
