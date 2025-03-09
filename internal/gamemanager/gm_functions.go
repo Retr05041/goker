@@ -184,4 +184,8 @@ func (gm *GameManager) RunProtocol() {
 	// Setup hands
 	gm.network.ExecuteCommand(&p2p.CanRequestHand{}) // Deals hands one player at at time
 	gm.network.ExecuteCommand(&p2p.RequestHandCommand{})
+
+	// Get Puzzle from everyone
+	gm.network.ExecuteCommand(&p2p.CanRequestPuzzle{})     // Tell everyone they can request their puzzle
+	gm.network.ExecuteCommand(&p2p.RequestPuzzleCommand{}) // Everyone sends each others timelocked payload to each other and they all begin to crack it
 }

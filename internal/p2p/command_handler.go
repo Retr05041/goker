@@ -131,8 +131,10 @@ func (p *GokerPeer) handleStream(stream network.Stream) {
 		p.RespondToCommand(&RequestRiver{}, stream)
 	case "RequestOthersHand":
 		p.RespondToCommand(&RequestOthersHands{}, stream)
+	case "CanRequestPuzzle":
+		p.ExecuteCommand(&RequestPuzzleCommand{})
 	case "PuzzleExchange":
-		p.RespondToCommand(&PuzzleExchangeCommand{}, stream)
+		p.RespondToCommand(&RequestPuzzleCommand{}, stream)
 	default:
 		log.Printf("Unknown Command Recieved: %s\n", nCmd.Command)
 	}
@@ -1280,9 +1282,38 @@ func (rh *RequestOthersHands) Respond(peer *GokerPeer, sendingStream network.Str
 
 //////////////////////////////////////////// TLP COMMANDS /////////////////////////////////////////////////////
 
-type PuzzleExchangeCommand struct{}
+type CanRequestPuzzle struct{}
 
-func (tlp *PuzzleExchangeCommand) Execute(p *GokerPeer) {
+func (c *CanRequestPuzzle) Execute(p *GokerPeer) {
+	p.peerListMutex.Lock()
+	defer p.peerListMutex.Unlock()
+
+	command := NetworkCommand{
+		Command: "CanRequestPuzzle",
+	}
+
+	for _, peerInfo := range p.peerList {
+		if peerInfo.ID == p.ThisHost.ID() {
+			continue
+		}
+		stream, err := p.ThisHost.NewStream(context.Background(), peerInfo.ID, protocolID)
+
+		if err != nil {
+			log.Printf("CanRequstPuzzle: failed to create stream to host %s: %v\n", peerInfo.ID, err)
+			return
+		}
+		defer stream.Close()
+		if err := sendCommand(stream, command); err != nil {
+			log.Fatalf("CanRequestPuzzle: failed to send command to peer %s: %v", peerInfo.ID, err)
+		}
+	}
+}
+
+func (c *CanRequestPuzzle) Respond(p *GokerPeer, sendingStream network.Stream) {}
+
+type RequestPuzzleCommand struct{}
+
+func (tlp *RequestPuzzleCommand) Execute(p *GokerPeer) {
 	p.peerListMutex.Lock()
 	defer p.peerListMutex.Unlock()
 
@@ -1320,7 +1351,7 @@ func (tlp *PuzzleExchangeCommand) Execute(p *GokerPeer) {
 	}
 }
 
-func (tlp *PuzzleExchangeCommand) Respond(p *GokerPeer, sendingStream network.Stream) {
+func (tlp *RequestPuzzleCommand) Respond(p *GokerPeer, sendingStream network.Stream) {
 	p.Keyring.GenerateTimeLockedPuzzle(15) // Make payload 15 seconds... will need to update this
 
 	payload, err := json.Marshal(p.Keyring.TLP)
