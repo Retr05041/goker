@@ -325,7 +325,7 @@ func (gs *GameState) PlayerFold(peerID peer.ID) {
 // Determines whos going and will check if the phases need to be switched
 func (gs *GameState) NextTurn() {
 	if len(gs.Players) == 1 { // If your last sitting at the table, just leave
-		gs.EndRound()
+		gs.EndRound() // Should be changed to end the game and return them to the lobby
 	}
 
 	// Check if only one player has not folded

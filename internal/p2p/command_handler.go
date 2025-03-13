@@ -1034,7 +1034,7 @@ func (rf *RequestFlop) Execute(peer *GokerPeer) {
 	}
 
 	for _, peerInfo := range peer.peerList {
-		if peerInfo.ID == peer.ThisHost.ID() {
+		if peerInfo.ID == peer.ThisHost.ID() || peer.gameState.FoldedPlayers[peerInfo.ID] { // If it's us or the person has folded
 			continue
 		}
 
@@ -1104,7 +1104,7 @@ func (rt *RequestTurn) Execute(peer *GokerPeer) {
 	}
 
 	for _, peerInfo := range peer.peerList {
-		if peerInfo.ID == peer.ThisHost.ID() {
+		if peerInfo.ID == peer.ThisHost.ID() || peer.gameState.FoldedPlayers[peerInfo.ID] {
 			continue
 		}
 
@@ -1172,7 +1172,7 @@ func (rr *RequestRiver) Execute(peer *GokerPeer) {
 	}
 
 	for _, peerInfo := range peer.peerList {
-		if peerInfo.ID == peer.ThisHost.ID() {
+		if peerInfo.ID == peer.ThisHost.ID() || peer.gameState.FoldedPlayers[peerInfo.ID] {
 			continue
 		}
 
@@ -1241,7 +1241,7 @@ func (r *RequestOthersHands) Execute(peer *GokerPeer) {
 	}
 
 	for _, peerInfo := range peer.peerList {
-		if peerInfo.ID == peer.ThisHost.ID() {
+		if peerInfo.ID == peer.ThisHost.ID() || peer.gameState.FoldedPlayers[peerInfo.ID] {
 			continue
 		}
 
@@ -1324,7 +1324,7 @@ func (tlp *RequestPuzzleCommand) Execute(p *GokerPeer) {
 	}
 
 	for _, peerInfo := range p.peerList {
-		if peerInfo.ID == p.ThisHost.ID() {
+		if peerInfo.ID == p.ThisHost.ID() || p.gameState.FoldedPlayers[peerInfo.ID] {
 			continue
 		}
 

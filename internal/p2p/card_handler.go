@@ -266,12 +266,6 @@ func (p *GokerPeer) sendHandToGUI(cardOneName, cardTwoName string) {
 	channelmanager.TGUI_HandChan <- newHand
 }
 
-func (d *deckInfo) DumpRoundDeck() {
-	for _, card := range d.RoundDeck {
-		fmt.Println(card.CardValue)
-	}
-}
-
 func (p *GokerPeer) SetBoard() {
 	numOfPlayers := p.gameState.GetNumberOfPlayers()
 
@@ -487,17 +481,26 @@ func (p *GokerPeer) DecryptOthersHand(peerID peer.ID, keys []string) {
 
 	// Decrypt card one
 	for _, keyStr := range cardOneKeys {
+		if contains(p.OthersHands[peerID][0].CardKeys, keyStr) { // Skip keys already used
+			continue
+		}
+
 		key, success := new(big.Int).SetString(keyStr, 10)
 		if !success {
 			log.Println("DecryptOthersHand: error: Unable to convert string to big.Int")
 			return
 		}
+
 		p.Keyring.DecryptWithKey(p.OthersHands[peerID][0].CardValue, key)
 	}
 	p.OthersHands[peerID][0].CardKeys = cardOneKeys
 
 	// Decrypt card two
 	for _, keyStr := range cardTwoKeys {
+		if contains(p.OthersHands[peerID][1].CardKeys, keyStr) {
+			continue
+		}
+
 		key, success := new(big.Int).SetString(keyStr, 10)
 		if !success {
 			log.Println("DecryptOthersHand: error: Unable to convert string to big.Int")
@@ -527,17 +530,19 @@ func (p *GokerPeer) DecryptRoundDeckWithPayload(payload string) {
 	pKeys := p.Keyring.GetKeysFromPayload(payload)
 
 	for i := range p.Deck.RoundDeck {
-		keyUsed := false
-		for j := range p.Deck.RoundDeck[i].CardKeys {
-			if p.Deck.RoundDeck[i].CardKeys[j] == pKeys[i].String() {
-				keyUsed = true
-				break
-			}
-		}
-		if !keyUsed {
+		if !contains(p.Deck.RoundDeck[i].CardKeys, pKeys[i].String()) {
 			p.Keyring.DecryptWithKey(p.Deck.RoundDeck[i].CardValue, pKeys[i])
 			p.Deck.RoundDeck[i].CardKeys = append(p.Deck.RoundDeck[i].CardKeys, pKeys[i].String())
 		}
 	}
 	fmt.Println("DecryptRoundDeckWithPayload: Was able to decrypt all cards!")
+}
+
+func contains(slice []string, item string) bool {
+	for _, s := range slice {
+		if s == item {
+			return true
+		}
+	}
+	return false
 }
