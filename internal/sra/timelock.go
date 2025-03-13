@@ -5,13 +5,10 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"io"
 	"math/big"
 	"time"
-
-	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 // Structure for Time locked puzzle payload
@@ -70,42 +67,6 @@ func (k *Keyring) GenerateTimeLockedPuzzle(seconds int64) {
 	k.TLP.Payload = encryptedPayload
 	k.TLP.Iter = iterations.String()
 	k.TLP.N = n.String()
-}
-
-// Unlocks the time-locked key by performing
-// `t` sequential squaring operations.
-func (k *Keyring) BreakTimeLockedPuzzle(peerID peer.ID, puzzlePayload []byte) {
-	var message TimeLock
-	if err := json.Unmarshal([]byte(puzzlePayload), &message); err != nil {
-		fmt.Println("Failed to parse received time-lock puzzle:", err)
-		return
-	}
-
-	// Convert string fields to big.Int
-	puzzle, _ := new(big.Int).SetString(message.Puzzle, 10)
-	iterations, _ := new(big.Int).SetString(message.Iter, 10)
-	n, _ := new(big.Int).SetString(message.N, 10)
-
-	fmt.Printf("Received time-locked puzzle from %s, beginning decryption...\n", &message)
-
-	// Step 1: Set base
-	base := big.NewInt(2)
-
-	// Step 2: Perform 't' squarings of 'base' modulo 'n'
-	for i := big.NewInt(0); i.Cmp(iterations) < 0; i.Add(i, big.NewInt(1)) {
-		base.Exp(base, big.NewInt(2), n)
-	}
-
-	// Step 3: Subtract `b` from the time locked puzzle to retrieve the private key
-	key := new(big.Int).Sub(puzzle, base)
-	key.Mod(key, n)
-
-	plaintextPayload, err := AESToPayload(message.Payload, key)
-	if err != nil {
-		fmt.Println(err)
-	}
-	fmt.Println("PUZZLE BROKE: ")
-	fmt.Println(plaintextPayload)
 }
 
 func (k *Keyring) CalibrateSquaringSpeed(n *big.Int) int64 {

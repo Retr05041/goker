@@ -1349,7 +1349,7 @@ func (tlp *RequestPuzzleCommand) Execute(p *GokerPeer) {
 			log.Fatalf("PuzzleExchange: invalid response format: expected string, got %T", response.Payload)
 		}
 
-		go p.Keyring.BreakTimeLockedPuzzle(peerInfo.ID, []byte(puzzlePayload))
+		go p.BreakTimeLockedPuzzle(peerInfo.ID, []byte(puzzlePayload))
 	}
 }
 

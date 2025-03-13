@@ -1,11 +1,13 @@
 package p2p
 
 import (
+	"encoding/json"
 	"fmt"
 	"goker/internal/channelmanager"
 	"goker/internal/gamestate"
 	"goker/internal/sra"
 	"log"
+	"math/big"
 	"sync"
 
 	libp2p "github.com/libp2p/go-libp2p"
@@ -105,4 +107,41 @@ func (p *GokerPeer) SetTurnOrderWithLobby() {
 	}
 	p.peerListMutex.Unlock()
 	p.gameState.SetTurnOrder(IDs)
+}
+
+// Unlocks the time-locked key by performing
+// `t` sequential squaring operations.
+func (p *GokerPeer) BreakTimeLockedPuzzle(peerID peer.ID, puzzlePayload []byte) {
+	var message sra.TimeLock
+	if err := json.Unmarshal([]byte(puzzlePayload), &message); err != nil {
+		fmt.Println("Failed to parse received time-lock puzzle:", err)
+		return
+	}
+
+	// Convert string fields to big.Int
+	puzzle, _ := new(big.Int).SetString(message.Puzzle, 10)
+	iterations, _ := new(big.Int).SetString(message.Iter, 10)
+	n, _ := new(big.Int).SetString(message.N, 10)
+
+	fmt.Printf("Received time-locked puzzle from %s, beginning decryption...\n", &message)
+
+	// Step 1: Set base
+	base := big.NewInt(2)
+
+	// Step 2: Perform 't' squarings of 'base' modulo 'n'
+	for i := big.NewInt(0); i.Cmp(iterations) < 0; i.Add(i, big.NewInt(1)) {
+		base.Exp(base, big.NewInt(2), n)
+	}
+
+	// Step 3: Subtract `b` from the time locked puzzle to retrieve the private key
+	key := new(big.Int).Sub(puzzle, base)
+	key.Mod(key, n)
+
+	plaintextPayload, err := sra.AESToPayload(message.Payload, key)
+	if err != nil {
+		fmt.Println(err)
+	}
+	fmt.Println("PUZZLE BROKE FOR: " + peerID.String())
+	fmt.Println(plaintextPayload)
+	//p.DecryptRoundDeckWithPayload(plaintextPayload)
 }
