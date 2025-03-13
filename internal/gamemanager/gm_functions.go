@@ -55,7 +55,7 @@ func (gm *GameManager) EvaluateHands() {
 	IDs := gm.state.GetTurnOrder()
 	for _, id := range IDs {
 		if !gm.state.FoldedPlayers[id] { // Don't want to add folded players to our check
-			var hand []p2p.CardInfo
+			var hand []*p2p.CardInfo
 			if id == gm.network.ThisHost.ID() {
 				hand = gm.network.MyHand
 				if len(hand) != 2 {
@@ -150,7 +150,7 @@ func (gm *GameManager) RestartRound() {
 	gm.state.MyBet = 0.0
 	gm.state.Phase = "preflop"
 	gm.state.WhosTurn = 0
-	gm.network.OthersHands = make(map[peer.ID][]p2p.CardInfo) // Need to reset this
+	gm.network.OthersHands = make(map[peer.ID][]*p2p.CardInfo) // Need to reset this
 
 	// Reinitialize the board
 	gm.initBoard()

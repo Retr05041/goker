@@ -112,6 +112,7 @@ func (p *GokerPeer) handleStream(stream network.Stream) {
 		p.gameState.NextTurn()
 		p.RespondToCommand(&RaiseCommand{}, stream)
 	case "Fold":
+		p.DecryptRoundDeckWithPayload(nCmd.Payload.(string))
 		p.gameState.PlayerFold(stream.Conn().RemotePeer())
 		p.gameState.NextTurn()
 		p.RespondToCommand(&FoldCommand{}, stream)
@@ -863,6 +864,7 @@ func (f *FoldCommand) Execute(p *GokerPeer) {
 
 	command := NetworkCommand{
 		Command: "Fold",
+		Payload: p.Keyring.KeyringPayload,
 	}
 
 	for _, peerInfo := range p.peerList {

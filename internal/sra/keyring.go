@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"math/big"
+	"strings"
 )
 
 type Keyring struct {
@@ -86,4 +87,30 @@ func (k *Keyring) SetPQ(p string, q string) {
 	k.sharedQ = new(big.Int)
 	k.sharedP.SetString(p, 10)
 	k.sharedQ.SetString(q, 10)
+}
+
+// Given a payload for someones entire keyring, give me the actual private keys (for decryption)
+func (k *Keyring) GetKeysFromPayload(payload string) []*big.Int {
+	keyList := strings.Split(payload, "\n")
+	var keys []*big.Int
+	privKey, ok := new(big.Int).SetString(keyList[1], 10)
+	if !ok {
+		log.Fatalf("Couldn't convert private key from payload")
+	}
+
+	for i, key := range keyList {
+		if i == 0 || i == 1 { // Don't care about the global keys right now
+			continue
+		}
+
+		r, ok := new(big.Int).SetString(key, 10)
+		if !ok {
+			log.Fatalf("Cannot set variation number")
+		}
+
+		rInv := new(big.Int).ModInverse(r, k.globalPHI)
+		keys = append(keys, new(big.Int).Mod(new(big.Int).Mul(privKey, rInv), k.globalPHI))
+	}
+
+	return keys
 }

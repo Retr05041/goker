@@ -27,7 +27,7 @@ type CardInfo struct {
 	index          int
 	VariationIndex int
 	CardValue      *big.Int
-	CardKeys       []string // This will hold they keys used to decrypt this card..
+	CardKeys       []string // This will hold the keys used to decrypt this card..
 }
 
 var ranks = [...]string{"ace", "2", "3", "4", "5", "6", "7", "8", "9", "10", "jack", "queen", "king"}
@@ -98,13 +98,13 @@ func (d *deckInfo) GetCardFromRefDeck(cardHash *big.Int) (key string, ok bool) {
 	return "", false
 }
 
-// Send a copy of the card we want
-func (d *deckInfo) GetCardFromRoundDeck(cardIndex int) CardInfo {
+// Get a pointer to the card in the round deck at a given index
+func (d *deckInfo) GetCardFromRoundDeck(cardIndex int) *CardInfo {
 	if cardIndex < 0 || cardIndex >= len(d.RoundDeck) {
-		return CardInfo{}
+		return &CardInfo{}
 	}
 
-	return d.RoundDeck[cardIndex]
+	return &d.RoundDeck[cardIndex]
 }
 
 // Creates a payload to be sent to anther peer
@@ -213,9 +213,9 @@ func (p *GokerPeer) SetHands() {
 			log.Fatalf("error: Could not set my hand, missing cardOne or cardTwo\n")
 		}
 		if id == p.ThisHost.ID() { // put this host in another place
-			p.MyHand = []CardInfo{cardOne, cardTwo}
+			p.MyHand = []*CardInfo{cardOne, cardTwo}
 		} else {
-			p.OthersHands[id] = []CardInfo{cardOne, cardTwo}
+			p.OthersHands[id] = []*CardInfo{cardOne, cardTwo}
 		}
 	}
 }
@@ -287,7 +287,7 @@ func (p *GokerPeer) SetBoard() {
 		log.Fatalf("error: Could not set board, missing cards \n")
 	}
 
-	p.Flop = []CardInfo{cardOne, cardTwo, cardThree}
+	p.Flop = []*CardInfo{cardOne, cardTwo, cardThree}
 	p.Turn = cardFour
 	p.River = cardFive
 }
@@ -519,4 +519,25 @@ func (p *GokerPeer) GetKeyPayloadForMyHand() string {
 	allKeys = append(allKeys, p.MyHand[1].CardKeys...)
 
 	return strings.Join(allKeys, "\n")
+}
+
+// Given a keyring payload, generated in variations.go, we can decrypt the round deck
+// (if a given key has yet to be used on that card)
+func (p *GokerPeer) DecryptRoundDeckWithPayload(payload string) {
+	pKeys := p.Keyring.GetKeysFromPayload(payload)
+
+	for i := range p.Deck.RoundDeck {
+		keyUsed := false
+		for j := range p.Deck.RoundDeck[i].CardKeys {
+			if p.Deck.RoundDeck[i].CardKeys[j] == pKeys[i].String() {
+				keyUsed = true
+				break
+			}
+		}
+		if !keyUsed {
+			p.Keyring.DecryptWithKey(p.Deck.RoundDeck[i].CardValue, pKeys[i])
+			p.Deck.RoundDeck[i].CardKeys = append(p.Deck.RoundDeck[i].CardKeys, pKeys[i].String())
+		}
+	}
+	fmt.Println("DecryptRoundDeckWithPayload: Was able to decrypt all cards!")
 }
