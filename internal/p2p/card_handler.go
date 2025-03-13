@@ -289,32 +289,47 @@ func (p *GokerPeer) SetBoard() {
 func (p *GokerPeer) DecryptFlop(cardOneKeys, cardTwoKeys, cardThreeKeys []string) {
 	// Decrypt card one
 	for _, key := range cardOneKeys {
+		if contains(p.Flop[0].CardKeys, key) {
+			continue
+		}
+
 		keyOne, success := new(big.Int).SetString(key, 10)
 		if !success {
 			log.Println("DecryptFlop: error: Unable to convert string to big.Int")
 			return
 		}
 		p.Keyring.DecryptWithKey(p.Flop[0].CardValue, keyOne)
+		p.Flop[2].CardKeys = append(p.Flop[0].CardKeys, key)
 	}
 
 	// Decrypt card two
 	for _, key := range cardTwoKeys {
+		if contains(p.Flop[1].CardKeys, key) {
+			continue
+		}
+
 		keyTwo, success := new(big.Int).SetString(key, 10)
 		if !success {
 			log.Println("DecryptFlop: error: Unable to convert string to big.Int")
 			return
 		}
 		p.Keyring.DecryptWithKey(p.Flop[1].CardValue, keyTwo)
+		p.Flop[2].CardKeys = append(p.Flop[1].CardKeys, key)
 	}
 
 	// Decrypt card three
 	for _, key := range cardThreeKeys {
+		if contains(p.Flop[2].CardKeys, key) {
+			continue
+		}
+
 		keyThree, success := new(big.Int).SetString(key, 10)
 		if !success {
 			log.Println("DecryptFlop: error: Unable to convert string to big.Int")
 			return
 		}
 		p.Keyring.DecryptWithKey(p.Flop[2].CardValue, keyThree)
+		p.Flop[2].CardKeys = append(p.Flop[2].CardKeys, key)
 	}
 
 	err := p.Keyring.DecryptWithVariation(p.Flop[0].CardValue, p.Flop[0].VariationIndex)
@@ -432,12 +447,16 @@ func (p *GokerPeer) GetKeyPayloadForRiver() string {
 
 func (p *GokerPeer) DecryptTurn(turnKeys []string) {
 	for _, key := range turnKeys {
+		if contains(p.Turn.CardKeys, key) {
+			continue
+		}
 		turnKey, success := new(big.Int).SetString(key, 10)
 		if !success {
 			log.Println("DecryptTurn: error: Unable to convert string to big.Int")
 			return
 		}
 		p.Keyring.DecryptWithKey(p.Turn.CardValue, turnKey)
+		p.Turn.CardKeys = append(p.Turn.CardKeys, key)
 	}
 
 	err := p.Keyring.DecryptWithVariation(p.Turn.CardValue, p.Turn.VariationIndex)
@@ -448,12 +467,16 @@ func (p *GokerPeer) DecryptTurn(turnKeys []string) {
 
 func (p *GokerPeer) DecryptRiver(riverKeys []string) {
 	for _, key := range riverKeys {
+		if contains(p.River.CardKeys, key) {
+			continue
+		}
 		riverKey, success := new(big.Int).SetString(key, 10)
 		if !success {
 			log.Println("DecryptRiver: error: Unable to convert string to big.Int")
 			return
 		}
 		p.Keyring.DecryptWithKey(p.River.CardValue, riverKey)
+		p.River.CardKeys = append(p.River.CardKeys, key)
 	}
 
 	err := p.Keyring.DecryptWithVariation(p.River.CardValue, p.River.VariationIndex)
