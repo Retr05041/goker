@@ -45,7 +45,9 @@ type GameState struct {
 	Phase        string  // Current phase of the game (e.g., "preflop", "flop", "turn", "river")
 
 	// Winning player of previous round
-	Winner peer.ID
+	Winner             peer.ID
+	SomeoneLeft        bool // Boolean for if someone leaves and hasn't folded yet
+	NumOfPuzzlesBroken int  // this should go up by 1 with every time locked puzzle broken -
 }
 
 // Refresh state for new possible rounds
@@ -324,20 +326,29 @@ func (gs *GameState) PlayerFold(peerID peer.ID) {
 
 // Determines whos going and will check if the phases need to be switched
 func (gs *GameState) NextTurn() {
-	if len(gs.Players) == 1 { // If your last sitting at the table, just leave
-		gs.EndRound() // Should be changed to end the game and return them to the lobby
-	}
-
-	// Check if only one player has not folded
+	// Check if only one player is left at the table (ignore disconnected players)
 	nonFoldedCount := 0
+
 	for id := range gs.Players {
 		if !gs.FoldedPlayers[id] {
 			nonFoldedCount++
 		}
 	}
+
+	// If only one non-folded player remains, end the round immediately
 	if nonFoldedCount == 1 {
+		log.Println("Only one player remains, ending the round...")
 		gs.EndRound()
 		return
+	}
+
+	// If someone left, ensure we properly handle ending the round at the right time
+	if gs.SomeoneLeft {
+		log.Println("Someone left, checking if we need to end the round...")
+		if nonFoldedCount == 1 {
+			gs.EndRound()
+			return
+		}
 	}
 
 	// From all players who haven't folded, if there are any
@@ -352,8 +363,14 @@ func (gs *GameState) NextTurn() {
 		}
 	}
 	if phaseSwitch {
-		channelmanager.TGM_PhaseCheck <- struct{}{} // Tell gm to switch phases
-		<-channelmanager.TGS_PhaseSwitchDone
+		if gs.SomeoneLeft {
+			log.Println("Someone left, ending round instead of changing phase...")
+			gs.EndRound()
+			return
+		} else {
+			channelmanager.TGM_PhaseCheck <- struct{}{} // Tell gm to switch phases
+			<-channelmanager.TGS_PhaseSwitchDone
+		}
 	}
 
 	// Modular arithmetic to wrap around
@@ -380,4 +397,13 @@ func (gs *GameState) PlayerCheck(peerID peer.ID) {
 // The gamestate will call this so the game manager can reset everything and begin the next round
 func (gs *GameState) EndRound() {
 	channelmanager.TGM_EndRound <- struct{}{}
+}
+
+func (gs *GameState) Contains(slice []string, item string) bool {
+	for _, s := range slice {
+		if s == item {
+			return true
+		}
+	}
+	return false
 }

@@ -142,6 +142,9 @@ func (p *GokerPeer) BreakTimeLockedPuzzle(peerID peer.ID, puzzlePayload []byte) 
 		fmt.Println(err)
 	}
 	fmt.Println("PUZZLE BROKE FOR: " + peerID.String())
-	fmt.Println(plaintextPayload)
-	//p.DecryptRoundDeckWithPayload(plaintextPayload)
+	p.Keyring.BrokenPuzzlePayloads = append(p.Keyring.BrokenPuzzlePayloads, plaintextPayload)
+
+	// Signal that a puzzle was broken
+	p.gameState.NumOfPuzzlesBroken++
+	channelmanager.TGM_WaitForPuzzles <- struct{}{}
 }

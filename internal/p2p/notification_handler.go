@@ -37,6 +37,10 @@ func (p *GokerPeer) handleNotifications() {
 		DisconnectedF: func(n network.Network, conn network.Conn) { // On peer disconnect
 			fmt.Printf("NOTIFICATION: Disconnected from peer: %s\n", conn.RemotePeer())
 
+			if !p.gameState.FoldedPlayers[conn.RemotePeer()] { // If the person who left hasn't folded
+				p.gameState.SomeoneLeft = true
+			}
+
 			// Update the peers list and nicknames
 			p.handlePeerDisconnection(conn.RemotePeer())
 
@@ -49,8 +53,9 @@ func (p *GokerPeer) handleNotifications() {
 			// Update GUI of player leaving
 			channelmanager.TGUI_PlayerInfo <- p.gameState.GetPlayerInfo()
 
-			// End Round - Cannot continue
-			channelmanager.TGM_EndRound <- struct{}{}
+			if p.gameState.TurnOrder[p.gameState.WhosTurn] == conn.RemotePeer() {
+				p.gameState.NextTurn()
+			}
 		},
 	})
 

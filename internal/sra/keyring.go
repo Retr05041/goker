@@ -19,6 +19,8 @@ type Keyring struct {
 	// Time locking
 	TLP            *TimeLock
 	KeyringPayload string
+
+	BrokenPuzzlePayloads []string // Save all broken puzzles from others for when eval happens
 }
 
 // Set p & q to a randomly generated 2048 bit prime number.

@@ -289,7 +289,7 @@ func (p *GokerPeer) SetBoard() {
 func (p *GokerPeer) DecryptFlop(cardOneKeys, cardTwoKeys, cardThreeKeys []string) {
 	// Decrypt card one
 	for _, key := range cardOneKeys {
-		if contains(p.Flop[0].CardKeys, key) {
+		if p.gameState.Contains(p.Flop[0].CardKeys, key) {
 			continue
 		}
 
@@ -304,7 +304,7 @@ func (p *GokerPeer) DecryptFlop(cardOneKeys, cardTwoKeys, cardThreeKeys []string
 
 	// Decrypt card two
 	for _, key := range cardTwoKeys {
-		if contains(p.Flop[1].CardKeys, key) {
+		if p.gameState.Contains(p.Flop[1].CardKeys, key) {
 			continue
 		}
 
@@ -319,7 +319,7 @@ func (p *GokerPeer) DecryptFlop(cardOneKeys, cardTwoKeys, cardThreeKeys []string
 
 	// Decrypt card three
 	for _, key := range cardThreeKeys {
-		if contains(p.Flop[2].CardKeys, key) {
+		if p.gameState.Contains(p.Flop[2].CardKeys, key) {
 			continue
 		}
 
@@ -447,7 +447,7 @@ func (p *GokerPeer) GetKeyPayloadForRiver() string {
 
 func (p *GokerPeer) DecryptTurn(turnKeys []string) {
 	for _, key := range turnKeys {
-		if contains(p.Turn.CardKeys, key) {
+		if p.gameState.Contains(p.Turn.CardKeys, key) {
 			continue
 		}
 		turnKey, success := new(big.Int).SetString(key, 10)
@@ -467,7 +467,7 @@ func (p *GokerPeer) DecryptTurn(turnKeys []string) {
 
 func (p *GokerPeer) DecryptRiver(riverKeys []string) {
 	for _, key := range riverKeys {
-		if contains(p.River.CardKeys, key) {
+		if p.gameState.Contains(p.River.CardKeys, key) {
 			continue
 		}
 		riverKey, success := new(big.Int).SetString(key, 10)
@@ -504,7 +504,7 @@ func (p *GokerPeer) DecryptOthersHand(peerID peer.ID, keys []string) {
 
 	// Decrypt card one
 	for _, keyStr := range cardOneKeys {
-		if contains(p.OthersHands[peerID][0].CardKeys, keyStr) { // Skip keys already used
+		if p.gameState.Contains(p.OthersHands[peerID][0].CardKeys, keyStr) { // Skip keys already used
 			continue
 		}
 
@@ -520,7 +520,7 @@ func (p *GokerPeer) DecryptOthersHand(peerID peer.ID, keys []string) {
 
 	// Decrypt card two
 	for _, keyStr := range cardTwoKeys {
-		if contains(p.OthersHands[peerID][1].CardKeys, keyStr) {
+		if p.gameState.Contains(p.OthersHands[peerID][1].CardKeys, keyStr) {
 			continue
 		}
 
@@ -553,19 +553,9 @@ func (p *GokerPeer) DecryptRoundDeckWithPayload(payload string) {
 	pKeys := p.Keyring.GetKeysFromPayload(payload)
 
 	for i := range p.Deck.RoundDeck {
-		if !contains(p.Deck.RoundDeck[i].CardKeys, pKeys[i].String()) {
+		if !p.gameState.Contains(p.Deck.RoundDeck[i].CardKeys, pKeys[i].String()) {
 			p.Keyring.DecryptWithKey(p.Deck.RoundDeck[i].CardValue, pKeys[i])
 			p.Deck.RoundDeck[i].CardKeys = append(p.Deck.RoundDeck[i].CardKeys, pKeys[i].String())
 		}
 	}
-	fmt.Println("DecryptRoundDeckWithPayload: Was able to decrypt all cards!")
-}
-
-func contains(slice []string, item string) bool {
-	for _, s := range slice {
-		if s == item {
-			return true
-		}
-	}
-	return false
 }

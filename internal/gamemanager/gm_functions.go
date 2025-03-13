@@ -26,6 +26,26 @@ func (gm *GameManager) initBoard() {
 }
 
 func (gm *GameManager) EvaluateHands() {
+	if gm.state.SomeoneLeft {
+		log.Println("Waiting for all necessary puzzles to be broken before evaluation...")
+		for gm.state.NumOfPuzzlesBroken < len(gm.state.Players)-1 {
+			<-channelmanager.TGM_WaitForPuzzles
+		}
+		log.Println("All puzzles decrypted, decrypting deck.")
+		for _, payload := range gm.network.Keyring.BrokenPuzzlePayloads {
+			gm.network.DecryptRoundDeckWithPayload(payload)
+		}
+
+		gm.network.Keyring.BrokenPuzzlePayloads = nil
+
+		// We have to apply our keys
+		gm.DecryptBoardIfNeeded()
+		gm.DecryptOthersHandsIfNeeded()
+
+		// Reset
+		gm.state.SomeoneLeft = false
+	}
+
 	flopCardOne, flop1Exists := gm.network.Deck.GetCardFromRefDeck(gm.network.Flop[0].CardValue)
 	flopCardTwo, flop2Exists := gm.network.Deck.GetCardFromRefDeck(gm.network.Flop[1].CardValue)
 	flopCardThree, flop3Exists := gm.network.Deck.GetCardFromRefDeck(gm.network.Flop[2].CardValue)
@@ -122,6 +142,7 @@ func convertMyCardStringsToLibrarys(myCardStrings []string) []poker.Card {
 // RestartRound will be called when a game is being played and the round is over.
 // Will distribute pot and reset phase bets and restart the protocol
 func (gm *GameManager) RestartRound() {
+
 	// Distribute the pot to the winner
 	pot := gm.state.GetCurrentPot()
 	if winner, exists := gm.state.PlayersMoney[gm.state.Winner]; exists {
@@ -183,4 +204,34 @@ func (gm *GameManager) RunProtocol() {
 	// Get Puzzle from everyone
 	gm.network.ExecuteCommand(&p2p.CanRequestPuzzle{})     // Tell everyone they can request their puzzle
 	gm.network.ExecuteCommand(&p2p.RequestPuzzleCommand{}) // Everyone sends each others timelocked payload to each other and they all begin to crack it
+}
+
+func (gm *GameManager) DecryptBoardIfNeeded() {
+	for i := range gm.network.Flop {
+		key := gm.network.Keyring.GetVariationKeyForCard(gm.network.Flop[i].VariationIndex)
+		if !gm.state.Contains(gm.network.Flop[i].CardKeys, key.String()) {
+			gm.network.Keyring.DecryptWithKey(gm.network.Flop[i].CardValue, key)
+		}
+	}
+
+	tKey := gm.network.Keyring.GetVariationKeyForCard(gm.network.Turn.VariationIndex)
+	if !gm.state.Contains(gm.network.Turn.CardKeys, tKey.String()) {
+		gm.network.Keyring.DecryptWithKey(gm.network.Turn.CardValue, tKey)
+	}
+
+	rKey := gm.network.Keyring.GetVariationKeyForCard(gm.network.River.VariationIndex)
+	if !gm.state.Contains(gm.network.River.CardKeys, rKey.String()) {
+		gm.network.Keyring.DecryptWithKey(gm.network.River.CardValue, rKey)
+	}
+}
+
+func (gm *GameManager) DecryptOthersHandsIfNeeded() {
+	for _, hand := range gm.network.OthersHands {
+		for i := range hand {
+			key := gm.network.Keyring.GetVariationKeyForCard(hand[i].VariationIndex)
+			if !gm.state.Contains(hand[i].CardKeys, key.String()) {
+				gm.network.Keyring.DecryptWithKey(hand[i].CardValue, key)
+			}
+		}
+	}
 }
