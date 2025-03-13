@@ -26,11 +26,6 @@ func (gm *GameManager) initBoard() {
 }
 
 func (gm *GameManager) EvaluateHands() {
-	if gm.state.Phase == "preflop" { // If there are less than 5 cards to evaluate then we can't eval the hand
-		log.Println("Not enough cards to eval, simply restarting round")
-		gm.RestartRound()
-		return
-	}
 	flopCardOne, flop1Exists := gm.network.Deck.GetCardFromRefDeck(gm.network.Flop[0].CardValue)
 	flopCardTwo, flop2Exists := gm.network.Deck.GetCardFromRefDeck(gm.network.Flop[1].CardValue)
 	flopCardThree, flop3Exists := gm.network.Deck.GetCardFromRefDeck(gm.network.Flop[2].CardValue)
