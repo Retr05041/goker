@@ -209,7 +209,7 @@ func (gm *GameManager) startTurnTimer() {
 	// Start a goroutine for the timer
 	go func() {
 		select {
-		case <-time.After(10 * time.Second):
+		case <-time.After(30 * time.Second):
 			if gm.state.IsMyTurn() {
 				fmt.Println("Time's up! Auto-folding...")
 				gm.state.PlayerFold(gm.state.Me)              // Fold the player
