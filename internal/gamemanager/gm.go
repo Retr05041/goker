@@ -7,6 +7,7 @@ import (
 	"goker/internal/gui"
 	"goker/internal/p2p"
 	"log"
+	"time"
 
 	"fyne.io/fyne/v2/canvas"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -19,6 +20,8 @@ type GameManager struct {
 	MyNickname string
 	MyHand     []*canvas.Image // Cards for the current player (images for the GUI to render)
 	Board      []*canvas.Image // Community cards on the board (images for the gui to render)
+
+	stopTurnTimer chan struct{}
 }
 
 func (gm *GameManager) StartGame() {
@@ -74,11 +77,18 @@ func (gm *GameManager) listenForActions() {
 				gm.RunProtocol()
 
 				gm.network.ExecuteCommand(&p2p.MoveToTableCommand{}) // Tell everyone to move to the game table
+
+				// If it's my turn, start the turn timer
+				if gm.state.IsMyTurn() {
+					gm.startTurnTimer()
+				}
 			case "Raise":
 				if !gm.state.IsMyTurn() {
 					fmt.Println("Not your turn yet!")
 					continue // NO BREAKING
 				}
+				gm.stopTurnTimerIfRunning() // Stop the auto-fold timer
+
 				// Handle raise action
 				fmt.Println("Handling Raise action")
 				// Update state
@@ -87,11 +97,16 @@ func (gm *GameManager) listenForActions() {
 				gm.network.ExecuteCommand(&p2p.RaiseCommand{})
 
 				gm.state.NextTurn()
+				if gm.state.IsMyTurn() {
+					gm.startTurnTimer()
+				}
 			case "Call":
 				if !gm.state.IsMyTurn() {
 					fmt.Println("Not your turn yet!")
 					continue
 				}
+				gm.stopTurnTimerIfRunning()
+
 				// Handle call action
 				fmt.Println("Handling Call action")
 				// Update state
@@ -100,11 +115,16 @@ func (gm *GameManager) listenForActions() {
 				gm.network.ExecuteCommand(&p2p.CallCommand{})
 
 				gm.state.NextTurn()
+				if gm.state.IsMyTurn() {
+					gm.startTurnTimer()
+				}
 			case "Check":
 				if !gm.state.IsMyTurn() {
 					fmt.Println("Not your turn yet!")
 					continue
 				}
+				gm.stopTurnTimerIfRunning()
+
 				// Handle call action
 				fmt.Println("Handling Check action")
 				gm.state.PlayerCheck(gm.state.Me)
@@ -112,17 +132,25 @@ func (gm *GameManager) listenForActions() {
 				gm.network.ExecuteCommand(&p2p.CheckCommand{})
 
 				gm.state.NextTurn() // Skip your turn for now
+				if gm.state.IsMyTurn() {
+					gm.startTurnTimer()
+				}
 			case "Fold":
 				if !gm.state.IsMyTurn() {
 					fmt.Println("Not your turn yet!")
 					continue
 				}
+				gm.stopTurnTimerIfRunning()
+
 				// Handle fold action
 				fmt.Println("Handling Fold action")
 				gm.state.PlayerFold(gm.state.Me)              // I fold
 				gm.network.ExecuteCommand(&p2p.FoldCommand{}) // Tell others I have folded
 
 				gm.state.NextTurn() // Move to next person
+				if gm.state.IsMyTurn() {
+					gm.startTurnTimer()
+				}
 			}
 		}
 	}
@@ -171,5 +199,37 @@ func (gm *GameManager) roundChanger() {
 	for {
 		<-channelmanager.TGM_EndRound
 		gm.EvaluateHands()
+	}
+}
+
+func (gm *GameManager) startTurnTimer() {
+	// Create a channel to stop the timer if the player makes a move
+	stopTimer := make(chan struct{})
+
+	// Start a goroutine for the timer
+	go func() {
+		select {
+		case <-time.After(10 * time.Second):
+			if gm.state.IsMyTurn() {
+				fmt.Println("Time's up! Auto-folding...")
+				gm.state.PlayerFold(gm.state.Me)              // Fold the player
+				gm.network.ExecuteCommand(&p2p.FoldCommand{}) // Notify others
+				gm.state.NextTurn()                           // Move to the next player's turn
+			}
+		case <-stopTimer:
+			// The player made a move in time, so we stop the timer
+			return
+		}
+	}()
+
+	// Store the stop channel in GameManager to stop the timer when needed
+	gm.stopTurnTimer = stopTimer
+}
+
+// Call this function inside your existing action cases (Raise, Call, Check, Fold) to stop the timer when an action is taken:
+func (gm *GameManager) stopTurnTimerIfRunning() {
+	if gm.stopTurnTimer != nil {
+		close(gm.stopTurnTimer) // Stops the timer goroutine
+		gm.stopTurnTimer = nil  // Reset it so it's not used again
 	}
 }
