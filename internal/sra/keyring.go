@@ -20,7 +20,7 @@ type Keyring struct {
 	// Signature information //
 	signingPrivKey *rsa.PrivateKey
 	signingPubKey  *rsa.PublicKey
-	otherskeys     map[peer.ID]*rsa.PublicKey
+	Otherskeys     map[peer.ID]*rsa.PublicKey
 
 	// SRA infomation //
 	sharedP, sharedQ *big.Int
@@ -104,7 +104,12 @@ func (k *Keyring) SignMessage(message string) (string, error) {
 }
 
 // Verify a message's signature using the sender's public key
-func VerifySignature(publicKey *rsa.PublicKey, message string, signature string) bool {
+func (k *Keyring) VerifySignature(sendingPeer peer.ID, message string, signature string) bool {
+	peerPubKey, exists := k.Otherskeys[sendingPeer]
+	if !exists {
+		log.Fatalf("VerifySignature: missing public key for peer %s\n", sendingPeer)
+	}
+
 	// Decode base64 signature
 	sigBytes, err := base64.StdEncoding.DecodeString(signature)
 	if err != nil {
@@ -115,14 +120,14 @@ func VerifySignature(publicKey *rsa.PublicKey, message string, signature string)
 	hash := sha256.Sum256([]byte(message))
 
 	// Verify the signature
-	err = rsa.VerifyPKCS1v15(publicKey, crypto.SHA256, hash[:], sigBytes)
+	err = rsa.VerifyPKCS1v15(peerPubKey, crypto.SHA256, hash[:], sigBytes)
 	return err == nil
 }
 
 // Function to store a peer's public key in Keyring
 func (k *Keyring) SetPeerPublicKey(peerID peer.ID, publicKey string) {
-	if k.otherskeys == nil {
-		k.otherskeys = make(map[peer.ID]*rsa.PublicKey)
+	if k.Otherskeys == nil {
+		k.Otherskeys = make(map[peer.ID]*rsa.PublicKey)
 	}
 
 	// Decode the PEM public key
@@ -132,7 +137,7 @@ func (k *Keyring) SetPeerPublicKey(peerID peer.ID, publicKey string) {
 		return
 	}
 
-	k.otherskeys[peerID] = decodedKey
+	k.Otherskeys[peerID] = decodedKey
 	log.Printf("Stored public key for peer: %s", peerID)
 }
 
@@ -228,27 +233,4 @@ func (k *Keyring) GetKeysFromPayload(payload string) []*big.Int {
 	}
 
 	return keys
-}
-
-func TestSigning() {
-	// Initialize keyring and generate keys
-	var k Keyring
-	k.GenerateSigningKeys()
-
-	// Export public key (to share with peers)
-	publicKeyString, _ := k.ExportPublicKey()
-	fmt.Println("Public Key:", publicKeyString)
-
-	// Example command
-	command := "bet"
-	payload := "Player1 raises 100 chips"
-
-	// Create and sign message
-	message := fmt.Sprintf("%s|%s", command, payload)
-	signature, _ := k.SignMessage(message)
-	fmt.Println("Signature:", signature)
-
-	// Verify the signature using stored public key
-	isValid := VerifySignature(k.signingPubKey, message, signature)
-	fmt.Println("Signature valid?", isValid)
 }
