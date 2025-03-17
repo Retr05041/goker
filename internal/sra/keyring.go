@@ -1,13 +1,28 @@
 package sra
 
 import (
+	"crypto"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/sha256"
+	"crypto/x509"
+	"encoding/base64"
+	"encoding/pem"
 	"fmt"
 	"log"
 	"math/big"
 	"strings"
+
+	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 type Keyring struct {
+	// Signature information //
+	signingPrivKey *rsa.PrivateKey
+	signingPubKey  *rsa.PublicKey
+	otherskeys     map[peer.ID]*rsa.PublicKey
+
+	// SRA infomation //
 	sharedP, sharedQ *big.Int
 
 	// Global keys (one set for encrypting every card)
@@ -21,6 +36,104 @@ type Keyring struct {
 	KeyringPayload string
 
 	BrokenPuzzlePayloads []string // Save all broken puzzles from others for when eval happens
+}
+
+// Generate RSA keys for signatures
+func (k *Keyring) GenerateSigningKeys() error {
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return fmt.Errorf("failed to generate signing keys: %v", err)
+	}
+
+	k.signingPrivKey = privateKey
+	k.signingPubKey = &privateKey.PublicKey
+	return nil
+}
+
+// Export the public key as a PEM-encoded string -- will be sent through the network
+func (k *Keyring) ExportPublicKey() (string, error) {
+	pubASN1, err := x509.MarshalPKIXPublicKey(k.signingPubKey)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal public key: %v", err)
+	}
+
+	pubPEM := pem.EncodeToMemory(&pem.Block{
+		Type:  "PUBLIC KEY",
+		Bytes: pubASN1,
+	})
+	return string(pubPEM), nil
+}
+
+// DecodePEMPublicKey converts a PEM-encoded string into an *rsa.PublicKey
+func DecodePEMPublicKey(pemStr string) (*rsa.PublicKey, error) {
+	block, _ := pem.Decode([]byte(pemStr))
+	if block == nil {
+		return nil, fmt.Errorf("invalid PEM data")
+	}
+
+	pubKey, err := x509.ParsePKIXPublicKey(block.Bytes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse public key: %v", err)
+	}
+
+	rsaPubKey, ok := pubKey.(*rsa.PublicKey)
+	if !ok {
+		return nil, fmt.Errorf("key is not an RSA public key")
+	}
+
+	return rsaPubKey, nil
+}
+
+// Sign a message using RSA private key
+func (k *Keyring) SignMessage(message string) (string, error) {
+	if k.signingPrivKey == nil {
+		return "", fmt.Errorf("signing key not initialized")
+	}
+
+	// Hash the message
+	hash := sha256.Sum256([]byte(message))
+
+	// Sign the hash
+	signature, err := rsa.SignPKCS1v15(rand.Reader, k.signingPrivKey, crypto.SHA256, hash[:])
+	if err != nil {
+		return "", fmt.Errorf("failed to sign message: %v", err)
+	}
+
+	// Encode signature as base64 for easy transmission
+	return base64.StdEncoding.EncodeToString(signature), nil
+}
+
+// Verify a message's signature using the sender's public key
+func VerifySignature(publicKey *rsa.PublicKey, message string, signature string) bool {
+	// Decode base64 signature
+	sigBytes, err := base64.StdEncoding.DecodeString(signature)
+	if err != nil {
+		return false
+	}
+
+	// Hash the message
+	hash := sha256.Sum256([]byte(message))
+
+	// Verify the signature
+	err = rsa.VerifyPKCS1v15(publicKey, crypto.SHA256, hash[:], sigBytes)
+	return err == nil
+}
+
+// Function to store a peer's public key in Keyring
+func (k *Keyring) SetPeerPublicKey(peerID peer.ID, publicKey string) {
+	if k.otherskeys == nil {
+		k.otherskeys = make(map[peer.ID]*rsa.PublicKey)
+	}
+
+	// Decode the PEM public key
+	decodedKey, err := DecodePEMPublicKey(publicKey)
+	if err != nil {
+		log.Printf("Failed to decode public key for peer %s: %v", peerID, err)
+		return
+	}
+
+	k.otherskeys[peerID] = decodedKey
+	log.Printf("Stored public key for peer: %s", peerID)
 }
 
 // Set p & q to a randomly generated 2048 bit prime number.
@@ -115,4 +228,27 @@ func (k *Keyring) GetKeysFromPayload(payload string) []*big.Int {
 	}
 
 	return keys
+}
+
+func TestSigning() {
+	// Initialize keyring and generate keys
+	var k Keyring
+	k.GenerateSigningKeys()
+
+	// Export public key (to share with peers)
+	publicKeyString, _ := k.ExportPublicKey()
+	fmt.Println("Public Key:", publicKeyString)
+
+	// Example command
+	command := "bet"
+	payload := "Player1 raises 100 chips"
+
+	// Create and sign message
+	message := fmt.Sprintf("%s|%s", command, payload)
+	signature, _ := k.SignMessage(message)
+	fmt.Println("Signature:", signature)
+
+	// Verify the signature using stored public key
+	isValid := VerifySignature(k.signingPubKey, message, signature)
+	fmt.Println("Signature valid?", isValid)
 }

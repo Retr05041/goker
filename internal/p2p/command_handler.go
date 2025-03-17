@@ -31,8 +31,9 @@ func (p *GokerPeer) RespondToCommand(pCmd PeerCommand, stream network.Stream) {
 
 // Structure for messages to be sent over the network
 type NetworkCommand struct {
-	Command string `json:"command"`
-	Payload any    `json:"payload"`
+	Command   string `json:"command"`
+	Payload   any    `json:"payload"`
+	Signature string `json:"signature"`
 }
 
 // Send a network command to a specific stream
@@ -75,6 +76,8 @@ func (p *GokerPeer) handleStream(stream network.Stream) {
 	switch nCmd.Command {
 	case "GetPeers":
 		p.RespondToCommand(&GetPeerListCommand{}, stream)
+	case "RequestPubKey":
+		p.RespondToCommand(&RequestPubKeyCommand{}, stream)
 	case "NicknameRequest":
 		p.RespondToCommand(&NicknameRequestCommand{}, stream)
 	case "InitTable":
@@ -190,6 +193,68 @@ func (gpl *GetPeerListCommand) Respond(peer *GokerPeer, sendingStream network.St
 
 	if err := sendCommand(sendingStream, response); err != nil {
 		log.Printf("GetPeerListCommand: failed to send peer list: %v", err)
+	}
+}
+
+// Get signature data
+type RequestPubKeyCommand struct{}
+
+func (rpk *RequestPubKeyCommand) Execute(peer *GokerPeer) {
+
+	peer.peerListMutex.Lock()
+	defer peer.peerListMutex.Unlock()
+
+	for _, peerInfo := range peer.peerList {
+		if peerInfo.ID == peer.ThisHost.ID() {
+			continue
+		}
+
+		stream, err := peer.ThisHost.NewStream(context.Background(), peer.sessionHost.ID, protocolID)
+		if err != nil {
+			log.Printf("RequestPubKeyCommand: failed to create stream to peer %s: %v\n", peer.sessionHost, err)
+			return
+		}
+		defer stream.Close()
+
+		request := NetworkCommand{
+			Command: "RequestPubKey",
+			Payload: nil,
+		}
+
+		if err := sendCommand(stream, request); err != nil {
+			log.Printf("RequestPubKeyCommand: failed to send request: %v", err)
+		}
+
+		response, err := receiveResponse(stream)
+		if err != nil {
+			log.Fatalf("RequestPubKeyCommand: failed to read response from peer %s: %v\n", peerInfo.ID, err)
+		}
+
+		keyPayload, ok := response.Payload.(string)
+		if !ok {
+			log.Fatalf("NicknameRequest: nickname not a string from peer: %v\n", peerInfo.ID)
+		}
+
+		peer.Keyring.SetPeerPublicKey(peerInfo.ID, keyPayload)
+	}
+}
+
+func (rpk *RequestPubKeyCommand) Respond(peer *GokerPeer, sendingStream network.Stream) {
+	defer sendingStream.Close()
+
+	key, err := peer.Keyring.ExportPublicKey()
+	if err != nil {
+		log.Fatalf("%v\n", err)
+	}
+
+	// Respond with the peer's public key
+	response := NetworkCommand{
+		Command: "RequestPubKey",
+		Payload: key,
+	}
+
+	if err := sendCommand(sendingStream, response); err != nil {
+		log.Printf("RequestPublicKeyCommand: failed to send public key: %v", err)
 	}
 }
 

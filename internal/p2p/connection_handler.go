@@ -44,6 +44,8 @@ func (p *GokerPeer) connectToHost(peerAddr string) {
 
 	p.ExecuteCommand(&GetPeerListCommand{})
 
+	p.ExecuteCommand(&RequestPubKeyCommand{})
+
 	p.ExecuteCommand(&NicknameRequestCommand{})
 
 	// Tell GUI to change the number of players

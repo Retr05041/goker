@@ -51,6 +51,8 @@ type peerInfo struct {
 func (p *GokerPeer) Init(nickname string, hosting bool, givenAddr string, givenState *gamestate.GameState) {
 	// Setup deck and keyring for later
 	p.Keyring = new(sra.Keyring)
+	p.Keyring.GenerateSigningKeys()
+
 	p.Deck = new(deckInfo)
 	p.OthersHands = make(map[peer.ID][]*CardInfo)
 	// TODO: Make this decided at runtime?
