@@ -57,6 +57,36 @@ func receiveResponse(stream network.Stream) (NetworkCommand, error) {
 	return cmd, nil
 }
 
+func (p *GokerPeer) signCommand(nCmd *NetworkCommand) {
+
+	signingData := nCmd.Command
+	if nCmd != nil {
+		payloadJSON, _ := json.Marshal(nCmd.Payload)
+		signingData += string(payloadJSON)
+	}
+
+	signature, err := p.Keyring.SignMessage(signingData)
+	if err != nil {
+		log.Fatalf("signCommand: failed to sign request: %v", err)
+	}
+	// Attach signature inside the request
+	nCmd.Signature = signature
+}
+
+func (p *GokerPeer) verifyCommand(from peer.ID, nCmd *NetworkCommand) {
+	// Verify signature using "Command" + "Payload"
+	responseSigCheck := nCmd.Command
+	if nCmd.Payload != nil {
+		payloadJSON, _ := json.Marshal(nCmd.Payload)
+		responseSigCheck += string(payloadJSON)
+	}
+
+	if !p.Keyring.VerifySignature(from, responseSigCheck, nCmd.Signature) {
+		log.Fatalf("verifyCommand: invalid signature in response from %s\n", from)
+	}
+
+}
+
 // Handle incoming streams (should be commands only)
 func (p *GokerPeer) handleStream(stream network.Stream) {
 	defer stream.Close()
@@ -149,10 +179,10 @@ func (p *GokerPeer) handleStream(stream network.Stream) {
 // Sent to host to get the most up to date peer list
 type GetPeerListCommand struct{}
 
-func (gpl *GetPeerListCommand) Execute(peer *GokerPeer) {
-	stream, err := peer.ThisHost.NewStream(context.Background(), peer.sessionHost.ID, protocolID)
+func (gpl *GetPeerListCommand) Execute(p *GokerPeer) {
+	stream, err := p.ThisHost.NewStream(context.Background(), p.sessionHost.ID, protocolID)
 	if err != nil {
-		log.Printf("GetPeerListCommand: failed to create stream to host %s: %v\n", peer.sessionHost, err)
+		log.Printf("GetPeerListCommand: failed to create stream to host %s: %v\n", p.sessionHost, err)
 		return
 	}
 	defer stream.Close()
@@ -179,16 +209,16 @@ func (gpl *GetPeerListCommand) Execute(peer *GokerPeer) {
 		log.Fatalf("GetPeerListCommand: invalid response format: expected string, got %T", response.Payload)
 	}
 
-	peer.setPeerListAndConnect(peerList)
+	p.setPeerListAndConnect(peerList)
 	log.Println("GetPeerListCommand: received and set peerlist.")
 }
 
-func (gpl *GetPeerListCommand) Respond(peer *GokerPeer, sendingStream network.Stream) {
+func (gpl *GetPeerListCommand) Respond(p *GokerPeer, sendingStream network.Stream) {
 	defer sendingStream.Close()
 
 	response := NetworkCommand{
 		Command: "GetPeers",
-		Payload: peer.getPeerList(),
+		Payload: p.getPeerList(),
 	}
 
 	if err := sendCommand(sendingStream, response); err != nil {
@@ -199,19 +229,19 @@ func (gpl *GetPeerListCommand) Respond(peer *GokerPeer, sendingStream network.St
 // Get signature data
 type RequestPubKeyCommand struct{}
 
-func (rpk *RequestPubKeyCommand) Execute(peer *GokerPeer) {
-	peer.peerListMutex.Lock()
-	defer peer.peerListMutex.Unlock()
+func (rpk *RequestPubKeyCommand) Execute(p *GokerPeer) {
+	p.peerListMutex.Lock()
+	defer p.peerListMutex.Unlock()
 
-	for _, peerInfo := range peer.peerList {
-		if peerInfo.ID == peer.ThisHost.ID() {
+	for _, peerInfo := range p.peerList {
+		if peerInfo.ID == p.ThisHost.ID() {
 			continue
 		}
-		if _, ok := peer.Keyring.Otherskeys[peerInfo.ID]; ok { // If their pub key already exists, skip
+		if _, ok := p.Keyring.Otherskeys[peerInfo.ID]; ok { // If their pub key already exists, skip
 			continue
 		}
 
-		stream, err := peer.ThisHost.NewStream(context.Background(), peerInfo.ID, protocolID)
+		stream, err := p.ThisHost.NewStream(context.Background(), peerInfo.ID, protocolID)
 		if err != nil {
 			log.Printf("RequestPubKeyCommand: failed to create stream to peer %s: %v\n", peerInfo.ID, err)
 			return
@@ -237,14 +267,14 @@ func (rpk *RequestPubKeyCommand) Execute(peer *GokerPeer) {
 			log.Fatalf("NicknameRequest: nickname not a string from peer: %v\n", peerInfo.ID)
 		}
 
-		peer.Keyring.SetPeerPublicKey(peerInfo.ID, keyPayload)
+		p.Keyring.SetPeerPublicKey(peerInfo.ID, keyPayload)
 	}
 }
 
-func (rpk *RequestPubKeyCommand) Respond(peer *GokerPeer, sendingStream network.Stream) {
+func (rpk *RequestPubKeyCommand) Respond(p *GokerPeer, sendingStream network.Stream) {
 	defer sendingStream.Close()
 
-	key, err := peer.Keyring.ExportPublicKey()
+	key, err := p.Keyring.ExportPublicKey()
 	if err != nil {
 		log.Fatalf("%v\n", err)
 	}
@@ -263,22 +293,22 @@ func (rpk *RequestPubKeyCommand) Respond(peer *GokerPeer, sendingStream network.
 // Sent to everyone new joining to add to state
 type NicknameRequestCommand struct{}
 
-func (nr *NicknameRequestCommand) Execute(peer *GokerPeer) {
-	peer.peerListMutex.Lock()
-	defer peer.peerListMutex.Unlock()
+func (nr *NicknameRequestCommand) Execute(p *GokerPeer) {
+	p.peerListMutex.Lock()
+	defer p.peerListMutex.Unlock()
 
-	for _, peerInfo := range peer.peerList {
+	for _, peerInfo := range p.peerList {
 		// If it's us
-		if peerInfo.ID == peer.ThisHost.ID() {
+		if peerInfo.ID == p.ThisHost.ID() {
 			continue
 		}
 		// if the player already exists, then obviously we don't need their nickname
-		if peer.gameState.PlayerExists(peerInfo.ID) {
+		if p.gameState.PlayerExists(peerInfo.ID) {
 			continue
 		}
 
 		// Create a new stream to the peer
-		stream, err := peer.ThisHost.NewStream(context.Background(), peerInfo.ID, protocolID)
+		stream, err := p.ThisHost.NewStream(context.Background(), peerInfo.ID, protocolID)
 		if err != nil {
 			log.Printf("NicknameRequest: failed to create stream to host %s: %v\n", peerInfo.ID, err)
 			return
@@ -286,19 +316,14 @@ func (nr *NicknameRequestCommand) Execute(peer *GokerPeer) {
 		defer stream.Close()
 
 		// Create command
-		request := NetworkCommand{
+		command := NetworkCommand{
 			Command: "NicknameRequest",
+			Payload: nil,
 		}
-
-		signature, err := peer.Keyring.SignMessage(request.Command)
-		if err != nil {
-			log.Fatalf("NicknameRequest: failed to sign request: %v", err)
-		}
-		// Attach signature inside the request
-		request.Signature = signature
+		p.signCommand(&command)
 
 		// Send command through stream
-		if err := sendCommand(stream, request); err != nil {
+		if err := sendCommand(stream, command); err != nil {
 			log.Fatalf("NicknameRequest: failed to send NicknameRequest command: %v", err)
 		}
 
@@ -307,17 +332,7 @@ func (nr *NicknameRequestCommand) Execute(peer *GokerPeer) {
 		if err != nil {
 			log.Fatalf("NicknameRequest: failed to read response from host %s: %v\n", peerInfo.ID, err)
 		}
-
-		// Verify signature using "Command" + "Payload"
-		responseSigCheck := response.Command
-		if response.Payload != nil {
-			payloadJSON, _ := json.Marshal(response.Payload)
-			responseSigCheck += string(payloadJSON)
-		}
-
-		if !peer.Keyring.VerifySignature(peerInfo.ID, responseSigCheck, response.Signature) {
-			log.Fatalf("NicknameRequest: invalid signature in response from %s\n", peerInfo.ID)
-		}
+		p.verifyCommand(peerInfo.ID, &response)
 
 		// Ensure the response payload is a string
 		nickname, ok := response.Payload.(string)
@@ -327,33 +342,18 @@ func (nr *NicknameRequestCommand) Execute(peer *GokerPeer) {
 
 		peerNickname := strings.Split(nickname, "\n")
 		log.Printf("NicknameRequest: Received response from peer: %s -- Nickname: %s\n", peerInfo.ID, peerNickname[0])
-		peer.gameState.AddPeerToState(peerInfo.ID, peerNickname[0]) // Finally add peer to gamestate
+		p.gameState.AddPeerToState(peerInfo.ID, peerNickname[0]) // Finally add peer to gamestate
 	}
 }
 
-func (nr *NicknameRequestCommand) Respond(peer *GokerPeer, sendingStream network.Stream) {
+func (nr *NicknameRequestCommand) Respond(p *GokerPeer, sendingStream network.Stream) {
 	defer sendingStream.Close()
 
 	response := NetworkCommand{
 		Command: "NicknameRequest",
-		Payload: peer.gameState.GetNickname(peer.ThisHost.ID()),
+		Payload: p.gameState.GetNickname(p.ThisHost.ID()),
 	}
-
-	// Generate signature for "Command" + "Payload"
-	signingData := response.Command
-	if response.Payload != nil {
-		payloadJSON, _ := json.Marshal(response.Payload)
-		signingData += string(payloadJSON)
-	}
-
-	signature, err := peer.Keyring.SignMessage(signingData)
-	if err != nil {
-		log.Printf("NicknameRequestCommand: failed to sign response: %v", err)
-		return
-	}
-
-	// Attach signature inside response
-	response.Signature = signature
+	p.signCommand(&response)
 
 	if err := sendCommand(sendingStream, response); err != nil {
 		log.Printf("NicknameRequestCommand: failed to send nickname: %v", err)
@@ -389,17 +389,7 @@ func (it *InitTableCommand) Execute(p *GokerPeer) {
 				Command: "InitTable",
 				Payload: p.gameState.GetTableRules(),
 			}
-
-			signingData := command.Command
-			payloadJSON, _ := json.Marshal(command.Payload)
-			signingData += string(payloadJSON)
-
-			signature, err := p.Keyring.SignMessage(signingData)
-			if err != nil {
-				log.Fatalf("InitTableCommand: failed to sign request: %v", err)
-			}
-			// Attach signature inside the request
-			command.Signature = signature
+			p.signCommand(&command)
 
 			if err := sendCommand(stream, command); err != nil {
 				log.Fatalf("InitTableCommand: failed to send getpeers command: %v", err)
@@ -409,15 +399,7 @@ func (it *InitTableCommand) Execute(p *GokerPeer) {
 			if err != nil {
 				log.Fatalf("InitTableCommand: failed to recieve response from peer: %v", err)
 			}
-
-			// Verify signature using "Command" + "Payload"
-			responseSigCheck := response.Command
-			payloadJSON, _ = json.Marshal(response.Payload)
-			responseSigCheck += string(payloadJSON)
-
-			if !p.Keyring.VerifySignature(peerInfo.ID, responseSigCheck, response.Signature) {
-				log.Fatalf("InitTableCommand: invalid signature in response from %s\n", peerInfo.ID)
-			}
+			p.verifyCommand(peerID, &response)
 
 			doneResponse, ok := response.Payload.(string)
 			if !ok {
@@ -435,25 +417,12 @@ func (it *InitTableCommand) Execute(p *GokerPeer) {
 	log.Println("InitTableCommand: All available peers responded, proceeding...")
 }
 
-func (it *InitTableCommand) Respond(peer *GokerPeer, sendingStream network.Stream) {
+func (it *InitTableCommand) Respond(p *GokerPeer, sendingStream network.Stream) {
 	response := NetworkCommand{
 		Command: "InitTable",
 		Payload: "DONE",
 	}
-
-	// Generate signature for "Command" + "Payload"
-	signingData := response.Command
-	payloadJSON, _ := json.Marshal(response.Payload)
-	signingData += string(payloadJSON)
-
-	signature, err := peer.Keyring.SignMessage(signingData)
-	if err != nil {
-		log.Printf("InitTableCommand: failed to sign response: %v", err)
-		return
-	}
-
-	// Attach signature inside response
-	response.Signature = signature
+	p.signCommand(&response)
 
 	if err := sendCommand(sendingStream, response); err != nil {
 		log.Fatalf("InitTableCommand: failed to send 'DONE': %v", err)
@@ -490,6 +459,7 @@ func (pq *SendPQCommand) Execute(p *GokerPeer) {
 				Command: "SendPQ",
 				Payload: p.Keyring.GetPQString(),
 			}
+			p.signCommand(&command)
 
 			if err := sendCommand(stream, command); err != nil {
 				log.Fatalf("SendPQCommand: failed to send SendPQ command: %v", err)
@@ -499,6 +469,7 @@ func (pq *SendPQCommand) Execute(p *GokerPeer) {
 			if err != nil {
 				log.Fatalf("SendPQCommand: failed to recieve response from peer: %v", err)
 			}
+			p.verifyCommand(peerID, &response)
 
 			doneResponse, ok := response.Payload.(string)
 			if !ok {
@@ -516,11 +487,12 @@ func (pq *SendPQCommand) Execute(p *GokerPeer) {
 	log.Println("SendPQCommand: All available peers responded, proceeding...")
 }
 
-func (pq *SendPQCommand) Respond(peer *GokerPeer, sendingStream network.Stream) {
+func (pq *SendPQCommand) Respond(p *GokerPeer, sendingStream network.Stream) {
 	response := NetworkCommand{
 		Command: "SendPQ",
 		Payload: "DONE",
 	}
+	p.signCommand(&response)
 
 	if err := sendCommand(sendingStream, response); err != nil {
 		log.Fatalf("SendPQCommand: failed to send 'DONE': %v", err)
