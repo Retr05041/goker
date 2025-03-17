@@ -390,6 +390,17 @@ func (it *InitTableCommand) Execute(p *GokerPeer) {
 				Payload: p.gameState.GetTableRules(),
 			}
 
+			signingData := command.Command
+			payloadJSON, _ := json.Marshal(command.Payload)
+			signingData += string(payloadJSON)
+
+			signature, err := p.Keyring.SignMessage(signingData)
+			if err != nil {
+				log.Fatalf("InitTableCommand: failed to sign request: %v", err)
+			}
+			// Attach signature inside the request
+			command.Signature = signature
+
 			if err := sendCommand(stream, command); err != nil {
 				log.Fatalf("InitTableCommand: failed to send getpeers command: %v", err)
 			}
@@ -397,6 +408,15 @@ func (it *InitTableCommand) Execute(p *GokerPeer) {
 			response, err := receiveResponse(stream)
 			if err != nil {
 				log.Fatalf("InitTableCommand: failed to recieve response from peer: %v", err)
+			}
+
+			// Verify signature using "Command" + "Payload"
+			responseSigCheck := response.Command
+			payloadJSON, _ = json.Marshal(response.Payload)
+			responseSigCheck += string(payloadJSON)
+
+			if !p.Keyring.VerifySignature(peerInfo.ID, responseSigCheck, response.Signature) {
+				log.Fatalf("InitTableCommand: invalid signature in response from %s\n", peerInfo.ID)
 			}
 
 			doneResponse, ok := response.Payload.(string)
@@ -420,6 +440,20 @@ func (it *InitTableCommand) Respond(peer *GokerPeer, sendingStream network.Strea
 		Command: "InitTable",
 		Payload: "DONE",
 	}
+
+	// Generate signature for "Command" + "Payload"
+	signingData := response.Command
+	payloadJSON, _ := json.Marshal(response.Payload)
+	signingData += string(payloadJSON)
+
+	signature, err := peer.Keyring.SignMessage(signingData)
+	if err != nil {
+		log.Printf("InitTableCommand: failed to sign response: %v", err)
+		return
+	}
+
+	// Attach signature inside response
+	response.Signature = signature
 
 	if err := sendCommand(sendingStream, response); err != nil {
 		log.Fatalf("InitTableCommand: failed to send 'DONE': %v", err)
