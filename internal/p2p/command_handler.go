@@ -510,6 +510,7 @@ func (sp *ProtocolFirstStepCommand) Execute(p *GokerPeer) {
 		Command: "ProtocolFS",
 		Payload: p.Deck.GenerateDeckPayload(),
 	}
+	p.signCommand(&command)
 
 	p.peerListMutex.Lock()
 	defer p.peerListMutex.Unlock()
@@ -534,6 +535,7 @@ func (sp *ProtocolFirstStepCommand) Execute(p *GokerPeer) {
 		if err != nil {
 			log.Fatalf("ProtocolFirstStepCommand: failed to recieve deck from peer: %v", err)
 		}
+		p.verifyCommand(peerInfo.ID, &response)
 
 		newDeck, ok := response.Payload.(string)
 		if !ok {
@@ -541,6 +543,7 @@ func (sp *ProtocolFirstStepCommand) Execute(p *GokerPeer) {
 		}
 
 		command.Payload = newDeck // So the next peer has an up to date deck
+		p.signCommand(&command)
 	}
 
 	p.Deck.SetNewDeck(command.Payload.(string)) // Set the final deck for host
@@ -548,15 +551,16 @@ func (sp *ProtocolFirstStepCommand) Execute(p *GokerPeer) {
 }
 
 // Respond to a protocol's first command - Encrypt with global keys, shuffle, then send back - when this is called a new deck should be set already
-func (sp *ProtocolFirstStepCommand) Respond(peer *GokerPeer, sendingStream network.Stream) {
+func (sp *ProtocolFirstStepCommand) Respond(p *GokerPeer, sendingStream network.Stream) {
 	// Encrypt the deck with your global keys, shuffle it, then create a new payload to send back
-	peer.EncryptAllWithGlobalKeys()
-	peer.Deck.ShuffleRoundDeck()
+	p.EncryptAllWithGlobalKeys()
+	p.Deck.ShuffleRoundDeck()
 
 	response := NetworkCommand{
 		Command: "ProtocolFirstStep",
-		Payload: peer.Deck.GenerateDeckPayload(),
+		Payload: p.Deck.GenerateDeckPayload(),
 	}
+	p.signCommand(&response)
 
 	if err := sendCommand(sendingStream, response); err != nil {
 		log.Fatalf("ProtocolFirstStep: failed to send 'DONE' back to peer: %v", err)
@@ -576,6 +580,7 @@ func (b *BroadcastNewDeck) Execute(p *GokerPeer) {
 		Command: "BroadcastNewDeck",
 		Payload: p.Deck.GenerateDeckPayload(),
 	}
+	p.signCommand(&command)
 
 	// After all peers have processed, broadcast the final deck to everyone - This is where they will validate signatures?
 	for _, peerInfo := range p.peerList {
@@ -602,6 +607,7 @@ func (b *BroadcastNewDeck) Execute(p *GokerPeer) {
 			if err != nil {
 				log.Fatalf("BroadcastNewDeck: failed to recieve response from peer: %v", err)
 			}
+			p.verifyCommand(peerID, &response)
 
 			doneResponse, ok := response.Payload.(string)
 			if !ok {
@@ -624,6 +630,7 @@ func (b *BroadcastNewDeck) Respond(p *GokerPeer, sendingStream network.Stream) {
 		Command: "BroadcastNewDeck",
 		Payload: "DONE",
 	}
+	p.signCommand(&response)
 
 	if err := sendCommand(sendingStream, response); err != nil {
 		log.Fatalf("BroadcastNewDeck: failed to send 'DONE' back to peer: %v", err)
@@ -648,6 +655,7 @@ func (sp *ProtocolSecondStepCommand) Execute(p *GokerPeer) {
 		Command: "ProtocolSS",
 		Payload: p.Deck.GenerateDeckPayload(),
 	}
+	p.signCommand(&command)
 
 	for _, peerInfo := range p.peerList {
 		if peerInfo.ID == p.ThisHost.ID() {
@@ -670,6 +678,7 @@ func (sp *ProtocolSecondStepCommand) Execute(p *GokerPeer) {
 		if err != nil {
 			log.Fatalf("ProtocolSecondStep: failed to receive a response from peer %s: %v", peerInfo.ID, err)
 		}
+		p.verifyCommand(peerInfo.ID, &response)
 
 		newDeck, ok := response.Payload.(string)
 		if !ok {
@@ -677,6 +686,7 @@ func (sp *ProtocolSecondStepCommand) Execute(p *GokerPeer) {
 		}
 
 		command.Payload = newDeck
+		p.signCommand(&command)
 	}
 
 	p.Deck.SetDeckInPlace(command.Payload.(string))
@@ -686,14 +696,15 @@ func (sp *ProtocolSecondStepCommand) Execute(p *GokerPeer) {
 }
 
 // Respond to the protocols second command - Decrypt global keys, encrypt with variation, then send back- when this is called a new deck should be set already
-func (sp *ProtocolSecondStepCommand) Respond(peer *GokerPeer, sendingStream network.Stream) {
-	peer.DecryptAllWithGlobalKeys()
-	peer.EncryptAllWithVariation()
+func (sp *ProtocolSecondStepCommand) Respond(p *GokerPeer, sendingStream network.Stream) {
+	p.DecryptAllWithGlobalKeys()
+	p.EncryptAllWithVariation()
 
 	response := NetworkCommand{
 		Command: "ProtocolSecondStep",
-		Payload: peer.Deck.GenerateDeckPayload(),
+		Payload: p.Deck.GenerateDeckPayload(),
 	}
+	p.signCommand(&response)
 
 	if err := sendCommand(sendingStream, response); err != nil {
 		log.Fatalf("ProtocolSecondStep: failed to send deck back to peer: %v", err)
@@ -713,6 +724,7 @@ func (b *BroadcastDeck) Execute(p *GokerPeer) {
 		Command: "BroadcastDeck",
 		Payload: p.Deck.GenerateDeckPayload(),
 	}
+	p.signCommand(&command)
 
 	for _, peerInfo := range p.peerList {
 		if peerInfo.ID == p.ThisHost.ID() {
@@ -738,6 +750,7 @@ func (b *BroadcastDeck) Execute(p *GokerPeer) {
 			if err != nil {
 				log.Fatalf("BroadcastDeck: failed to recieve response from peer: %v", err)
 			}
+			p.verifyCommand(peerID, &response)
 
 			doneResponse, ok := response.Payload.(string)
 			if !ok {
@@ -760,6 +773,7 @@ func (b *BroadcastDeck) Respond(p *GokerPeer, sendingStream network.Stream) {
 		Command: "BroadcastDeck",
 		Payload: "DONE",
 	}
+	p.signCommand(&response)
 
 	if err := sendCommand(sendingStream, response); err != nil {
 		log.Fatalf("BroadcastDeck: failed to send 'DONE' back to peer: %v", err)
@@ -777,7 +791,9 @@ func (c *CanRequestHand) Execute(p *GokerPeer) {
 
 	command := NetworkCommand{
 		Command: "CanRequestHand",
+		Payload: nil,
 	}
+	p.signCommand(&command)
 
 	for _, peerInfo := range p.peerList {
 		if peerInfo.ID == p.ThisHost.ID() {
@@ -801,23 +817,25 @@ func (c *CanRequestHand) Respond(p *GokerPeer, sendingStream network.Stream) {}
 // Used if it's your turn to request your hand
 type RequestHandCommand struct{}
 
-func (rh *RequestHandCommand) Execute(peer *GokerPeer) {
-	peer.peerListMutex.Lock()
-	defer peer.peerListMutex.Unlock()
+func (rh *RequestHandCommand) Execute(p *GokerPeer) {
+	p.peerListMutex.Lock()
+	defer p.peerListMutex.Unlock()
 
 	var cardOneKeys []string
 	var cardTwoKeys []string
 
 	command := NetworkCommand{
 		Command: "RequestHand",
+		Payload: nil,
 	}
+	p.signCommand(&command)
 
-	for _, peerInfo := range peer.peerList {
-		if peerInfo.ID == peer.ThisHost.ID() {
+	for _, peerInfo := range p.peerList {
+		if peerInfo.ID == p.ThisHost.ID() {
 			continue
 		}
 
-		stream, err := peer.ThisHost.NewStream(context.Background(), peerInfo.ID, protocolID)
+		stream, err := p.ThisHost.NewStream(context.Background(), peerInfo.ID, protocolID)
 		if err != nil {
 			log.Printf("RequestHand: Failed to create stream to host %s: %v\n", peerInfo.ID, err)
 			return
@@ -832,6 +850,7 @@ func (rh *RequestHandCommand) Execute(peer *GokerPeer) {
 		if err != nil {
 			log.Fatalf("RequestHand: failed to recieve response from peer: %s", peerInfo.ID)
 		}
+		p.verifyCommand(peerInfo.ID, &response)
 
 		keyPayload, ok := response.Payload.(string)
 		if !ok {
@@ -844,26 +863,26 @@ func (rh *RequestHandCommand) Execute(peer *GokerPeer) {
 	}
 
 	// Now that I have all the keys for my hand, decrypt the hand
-	peer.DecryptMyHand(cardOneKeys, cardTwoKeys)
+	p.DecryptMyHand(cardOneKeys, cardTwoKeys)
 
 	// Set the hand in the GUI
-	cardOneName, exists := peer.Deck.GetCardFromRefDeck(peer.MyHand[0].CardValue) // Should be the hash
-	cardTwoName, exists2 := peer.Deck.GetCardFromRefDeck(peer.MyHand[1].CardValue)
+	cardOneName, exists := p.Deck.GetCardFromRefDeck(p.MyHand[0].CardValue) // Should be the hash
+	cardTwoName, exists2 := p.Deck.GetCardFromRefDeck(p.MyHand[1].CardValue)
 
 	if exists && exists2 {
-		peer.sendHandToGUI(cardOneName, cardTwoName)
+		p.sendHandToGUI(cardOneName, cardTwoName)
 		return
 	}
 
 	log.Fatalf("RequestHand: could not retrieve keys, aborting.")
 }
 
-func (rh *RequestHandCommand) Respond(peer *GokerPeer, sendingStream network.Stream) {
-	payload := peer.GetKeyPayloadForPlayersHand(sendingStream.Conn().RemotePeer())
+func (rh *RequestHandCommand) Respond(p *GokerPeer, sendingStream network.Stream) {
 	response := NetworkCommand{
 		Command: "RequestHand",
-		Payload: payload,
+		Payload: p.GetKeyPayloadForPlayersHand(sendingStream.Conn().RemotePeer()),
 	}
+	p.signCommand(&response)
 
 	if err := sendCommand(sendingStream, response); err != nil {
 		log.Fatalf("RequestHand: failed to send keys back to peer: %v", err)
