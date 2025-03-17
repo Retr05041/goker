@@ -58,9 +58,8 @@ func receiveResponse(stream network.Stream) (NetworkCommand, error) {
 }
 
 func (p *GokerPeer) signCommand(nCmd *NetworkCommand) {
-
 	signingData := nCmd.Command
-	if nCmd != nil {
+	if nCmd.Payload != nil {
 		payloadJSON, _ := json.Marshal(nCmd.Payload)
 		signingData += string(payloadJSON)
 	}
@@ -74,17 +73,15 @@ func (p *GokerPeer) signCommand(nCmd *NetworkCommand) {
 }
 
 func (p *GokerPeer) verifyCommand(from peer.ID, nCmd *NetworkCommand) {
-	// Verify signature using "Command" + "Payload"
-	responseSigCheck := nCmd.Command
+	signingData := nCmd.Command
 	if nCmd.Payload != nil {
 		payloadJSON, _ := json.Marshal(nCmd.Payload)
-		responseSigCheck += string(payloadJSON)
+		signingData += string(payloadJSON)
 	}
 
-	if !p.Keyring.VerifySignature(from, responseSigCheck, nCmd.Signature) {
+	if !p.Keyring.VerifySignature(from, signingData, nCmd.Signature) {
 		log.Fatalf("verifyCommand: invalid signature in response from %s\n", from)
 	}
-
 }
 
 // Handle incoming streams (should be commands only)
