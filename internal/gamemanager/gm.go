@@ -176,14 +176,17 @@ func (gm *GameManager) phaseListener() {
 		case "preflop":
 			gm.state.Phase = "flop"
 			gm.network.ExecuteCommand(&p2p.RequestFlop{})
+			gm.network.ExecuteCommand(&p2p.PushTagCommand{}) // Update tag for next phase
 			fmt.Println("CURRENT PHASE: " + gm.state.Phase)
 		case "flop":
 			gm.state.Phase = "turn"
 			gm.network.ExecuteCommand(&p2p.RequestTurn{})
+			gm.network.ExecuteCommand(&p2p.PushTagCommand{})
 			fmt.Println("CURRENT PHASE: " + gm.state.Phase)
 		case "turn":
 			gm.state.Phase = "river"
 			gm.network.ExecuteCommand(&p2p.RequestRiver{})
+			gm.network.ExecuteCommand(&p2p.PushTagCommand{})
 			fmt.Println("CURRENT PHASE: " + gm.state.Phase)
 		case "river":
 			log.Println("Round over! Determining winner and starting new round!")

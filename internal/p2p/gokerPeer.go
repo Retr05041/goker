@@ -1,6 +1,8 @@
 package p2p
 
 import (
+	"crypto/rand"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"goker/internal/channelmanager"
@@ -40,6 +42,9 @@ type GokerPeer struct {
 
 	// state given by the game manager
 	gameState *gamestate.GameState
+
+	// Context (tag) for commands per betting phase
+	tag uint64
 }
 
 // Holds important information about other peers in the network
@@ -149,4 +154,15 @@ func (p *GokerPeer) BreakTimeLockedPuzzle(peerID peer.ID, puzzlePayload []byte) 
 	// Signal that a puzzle was broken
 	p.gameState.NumOfPuzzlesBroken++
 	channelmanager.TGM_WaitForPuzzles <- struct{}{}
+}
+
+func (p *GokerPeer) GenerateNewTag() {
+	err := binary.Read(rand.Reader, binary.LittleEndian, &p.tag)
+	if err != nil {
+		log.Fatalf("GenerateNewTag: failed to generate random tag: %s\n", err.Error())
+	}
+}
+
+func (p *GokerPeer) SetNewTag(tag uint64) {
+	p.tag = tag
 }

@@ -197,6 +197,8 @@ func (gm *GameManager) RunProtocol() {
 	gm.network.ExecuteCommand(&p2p.ProtocolSecondStepCommand{}) // Setting up deck pt.2 & Sets everyones hands
 	gm.network.ExecuteCommand(&p2p.BroadcastDeck{})
 
+	gm.network.ExecuteCommand(&p2p.PushTagCommand{}) // Init first tag for preflop phase
+
 	// Setup hands
 	gm.network.ExecuteCommand(&p2p.CanRequestHand{}) // Deals hands one player at at time
 	gm.network.ExecuteCommand(&p2p.RequestHandCommand{})

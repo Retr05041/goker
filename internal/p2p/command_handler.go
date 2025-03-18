@@ -31,9 +31,10 @@ func (p *GokerPeer) RespondToCommand(pCmd PeerCommand, stream network.Stream) {
 
 // Structure for messages to be sent over the network
 type NetworkCommand struct {
-	Command   string `json:"command"`
-	Payload   any    `json:"payload"`
-	Signature string `json:"signature"`
+	Command   string  `json:"command"`
+	Payload   any     `json:"payload"`
+	Signature string  `json:"signature"`
+	Tag       *uint64 `json:"tag,omitempty"` // omitempty makes the tag field 'optional' (i.e. it won't even show up if there is nothing there)
 }
 
 // Send a network command to a specific stream
@@ -64,6 +65,10 @@ func (p *GokerPeer) signCommand(nCmd *NetworkCommand) {
 		signingData += string(payloadJSON)
 	}
 
+	if nCmd.Tag != nil { // Add tag if present
+		signingData += fmt.Sprintf("%d", *nCmd.Tag)
+	}
+
 	signature, err := p.Keyring.SignMessage(signingData)
 	if err != nil {
 		log.Fatalf("signCommand: failed to sign request: %v", err)
@@ -78,9 +83,26 @@ func (p *GokerPeer) verifyCommand(from peer.ID, nCmd *NetworkCommand) {
 		payloadJSON, _ := json.Marshal(nCmd.Payload)
 		signingData += string(payloadJSON)
 	}
+	if nCmd.Tag != nil { // Add tag if present
+		signingData += fmt.Sprintf("%d", *nCmd.Tag)
+	}
 
 	if !p.Keyring.VerifySignature(from, signingData, nCmd.Signature) {
+		log.Println(nCmd.Command)
 		log.Fatalf("verifyCommand: invalid signature in response from %s\n", from)
+	}
+
+	// Ensure game commands always have a tag
+	gameCommands := []string{"Raise", "Check", "Call", "Fold"}
+	for _, cmd := range gameCommands {
+		if strings.EqualFold(nCmd.Command, cmd) {
+			if nCmd.Tag == nil {
+				log.Fatalf("verifyCommand: missing tag for game command: %s\n", nCmd.Command)
+			}
+			if *nCmd.Tag != p.tag {
+				log.Fatalf("verifyCommand: invalid tag %d for game command: %s (expected %d)\n", *nCmd.Tag, nCmd.Command, p.tag)
+			}
+		}
 	}
 }
 
@@ -98,6 +120,12 @@ func (p *GokerPeer) handleStream(stream network.Stream) {
 		return
 	}
 
+	if nCmd.Command != "GetPeers" && nCmd.Command != "PubKeyExchange" {
+		p.verifyCommand(stream.Conn().RemotePeer(), &nCmd)
+	}
+
+	log.Println("Handling response to: " + nCmd.Command)
+
 	// Process the command based on the message
 	// These commands are in order for which they should be called
 	switch nCmd.Command {
@@ -107,10 +135,8 @@ func (p *GokerPeer) handleStream(stream network.Stream) {
 		p.Keyring.SetPeerPublicKey(stream.Conn().RemotePeer(), nCmd.Payload.(string))
 		p.RespondToCommand(&PubKeyExchangeCommand{}, stream)
 	case "NicknameRequest":
-		p.verifyCommand(stream.Conn().RemotePeer(), &nCmd)
 		p.RespondToCommand(&NicknameRequestCommand{}, stream)
 	case "InitTable":
-		p.verifyCommand(stream.Conn().RemotePeer(), &nCmd)
 		p.SetTurnOrderWithLobby()
 		p.gameState.FreshStateFromPayload(nCmd.Payload.(string))
 		channelmanager.TGUI_PlayerInfo <- p.gameState.GetPlayerInfo()
@@ -134,6 +160,8 @@ func (p *GokerPeer) handleStream(stream network.Stream) {
 		p.SetHands()
 		p.SetBoard()
 		p.RespondToCommand(&BroadcastDeck{}, stream)
+	case "PushTag":
+		p.tag = *nCmd.Tag
 	case "CanRequestHand":
 		p.ExecuteCommand(&RequestHandCommand{})
 	case "RequestHand": // Someone is requesting the keys to their hand
@@ -147,8 +175,8 @@ func (p *GokerPeer) handleStream(stream network.Stream) {
 	case "Fold":
 		p.DecryptRoundDeckWithPayload(nCmd.Payload.(string))
 		p.gameState.PlayerFold(stream.Conn().RemotePeer())
-		p.gameState.NextTurn()
 		p.RespondToCommand(&FoldCommand{}, stream)
+		p.gameState.NextTurn()
 	case "Call":
 		p.gameState.PlayerCall(stream.Conn().RemotePeer())
 		p.gameState.NextTurn()
@@ -899,6 +927,41 @@ func (rh *RequestHandCommand) Respond(p *GokerPeer, sendingStream network.Stream
 
 //////////////////////////////////////////// ROUND COMMANDS /////////////////////////////////////////////////////
 
+type PushTagCommand struct{}
+
+func (pt *PushTagCommand) Execute(p *GokerPeer) {
+	p.peerListMutex.Lock()
+	defer p.peerListMutex.Unlock()
+
+	p.GenerateNewTag()
+
+	command := NetworkCommand{
+		Command: "PushTag",
+		Payload: nil,
+		Tag:     &p.tag,
+	}
+	p.signCommand(&command)
+
+	for _, peerInfo := range p.peerList {
+		if peerInfo.ID == p.ThisHost.ID() {
+			continue
+		}
+
+		stream, err := p.ThisHost.NewStream(context.Background(), peerInfo.ID, protocolID)
+		if err != nil {
+			log.Printf("MoveToTable: Failed to create stream to host %s: %v\n", peerInfo.ID, err)
+			return
+		}
+		defer stream.Close()
+
+		if err := sendCommand(stream, command); err != nil {
+			log.Fatalf("MoveToTable: failed to send command to peer %s: %v", peerInfo.ID, err)
+		}
+	}
+}
+
+func (pt *PushTagCommand) Respond(p *GokerPeer, sendingStream network.Stream) {}
+
 type MoveToTableCommand struct{}
 
 func (mtt *MoveToTableCommand) Execute(p *GokerPeer) {
@@ -931,7 +994,7 @@ func (mtt *MoveToTableCommand) Execute(p *GokerPeer) {
 	channelmanager.TGUI_StartRound <- struct{}{} // Tell GUI to move to the table UI
 }
 
-func (mtt *MoveToTableCommand) Respond(peer *GokerPeer, sendingStream network.Stream) {}
+func (mtt *MoveToTableCommand) Respond(p *GokerPeer, sendingStream network.Stream) {}
 
 type RaiseCommand struct{}
 
@@ -942,6 +1005,7 @@ func (r *RaiseCommand) Execute(p *GokerPeer) {
 	command := NetworkCommand{
 		Command: "Raise",
 		Payload: p.gameState.MyBet,
+		Tag:     &p.tag,
 	}
 	p.signCommand(&command)
 
@@ -983,6 +1047,7 @@ func (r *RaiseCommand) Respond(p *GokerPeer, sendingStream network.Stream) {
 	response := NetworkCommand{
 		Command: "Raise",
 		Payload: "APPROVED",
+		Tag:     &p.tag,
 	}
 	p.signCommand(&response)
 
@@ -1000,6 +1065,7 @@ func (f *FoldCommand) Execute(p *GokerPeer) {
 	command := NetworkCommand{
 		Command: "Fold",
 		Payload: p.Keyring.KeyringPayload,
+		Tag:     &p.tag,
 	}
 	p.signCommand(&command)
 
@@ -1040,6 +1106,7 @@ func (f *FoldCommand) Respond(p *GokerPeer, sendingStream network.Stream) {
 	response := NetworkCommand{
 		Command: "Fold",
 		Payload: "APPROVED",
+		Tag:     &p.tag,
 	}
 	p.signCommand(&response)
 
@@ -1057,6 +1124,7 @@ func (c *CallCommand) Execute(p *GokerPeer) {
 	command := NetworkCommand{
 		Command: "Call",
 		Payload: nil,
+		Tag:     &p.tag,
 	}
 	p.signCommand(&command)
 
@@ -1097,6 +1165,7 @@ func (c *CallCommand) Respond(p *GokerPeer, sendingStream network.Stream) {
 	response := NetworkCommand{
 		Command: "Call",
 		Payload: "APPROVED",
+		Tag:     &p.tag,
 	}
 	p.signCommand(&response)
 
@@ -1114,6 +1183,7 @@ func (c *CheckCommand) Execute(p *GokerPeer) {
 	command := NetworkCommand{
 		Command: "Check",
 		Payload: nil,
+		Tag:     &p.tag,
 	}
 	p.signCommand(&command)
 
@@ -1154,6 +1224,7 @@ func (c *CheckCommand) Respond(p *GokerPeer, sendingStream network.Stream) {
 	response := NetworkCommand{
 		Command: "Check",
 		Payload: "APPROVED",
+		Tag:     &p.tag,
 	}
 	p.signCommand(&response)
 
