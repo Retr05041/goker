@@ -26,6 +26,24 @@ func (gm *GameManager) initBoard() {
 }
 
 func (gm *GameManager) EvaluateHands() {
+	// If only one non-folded player remains, they win immediately
+	activePlayers := 0
+	var lastActivePlayer peer.ID
+
+	for id, folded := range gm.state.FoldedPlayers {
+		if !folded {
+			activePlayers++
+			lastActivePlayer = id
+		}
+	}
+
+	if activePlayers == 1 {
+		fmt.Printf("Only one player (%s) remains. They win the pot!\n", gm.state.Players[lastActivePlayer])
+		gm.state.Winner = lastActivePlayer
+		gm.RestartRound()
+		return
+	}
+
 	if gm.state.SomeoneLeft {
 		log.Println("Waiting for all necessary puzzles to be broken before evaluation...")
 		for gm.state.NumOfPuzzlesBroken < len(gm.state.Players)-1 {
@@ -38,7 +56,7 @@ func (gm *GameManager) EvaluateHands() {
 
 		gm.network.Keyring.BrokenPuzzlePayloads = nil
 
-		// We have to apply our keys
+		// Just in case...
 		gm.DecryptBoardIfNeeded()
 		gm.DecryptOthersHandsIfNeeded()
 
@@ -142,7 +160,6 @@ func convertMyCardStringsToLibrarys(myCardStrings []string) []poker.Card {
 // RestartRound will be called when a game is being played and the round is over.
 // Will distribute pot and reset phase bets and restart the protocol
 func (gm *GameManager) RestartRound() {
-
 	// Distribute the pot to the winner
 	pot := gm.state.GetCurrentPot()
 	if winner, exists := gm.state.PlayersMoney[gm.state.Winner]; exists {
@@ -177,9 +194,8 @@ func (gm *GameManager) RestartRound() {
 
 	gm.network.Deck.GenerateDecks("gokerdecksecretkeyforhashesversion1")
 
-	// Start the next round's protocol if you are the host - Host will be first in turn order always
 	if gm.network.ThisHost.ID() == gm.state.TurnOrder[0] {
-		fmt.Println("I AM THE NEW HOST, STARTING PROTOCOL")
+		fmt.Println("I AM THE HOST, WAITING FOR ALL PLAYERS TO BE READY...")
 		gm.RunProtocol()
 	}
 }

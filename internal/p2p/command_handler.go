@@ -120,6 +120,11 @@ func (p *GokerPeer) handleStream(stream network.Stream) {
 		return
 	}
 
+	// If it's PushTag, update p.tag first before verifying
+	if nCmd.Command == "PushTag" && nCmd.Tag != nil {
+		p.tag = *nCmd.Tag
+	}
+
 	if nCmd.Command != "GetPeers" && nCmd.Command != "PubKeyExchange" {
 		p.verifyCommand(stream.Conn().RemotePeer(), &nCmd)
 	}
@@ -161,7 +166,7 @@ func (p *GokerPeer) handleStream(stream network.Stream) {
 		p.SetBoard()
 		p.RespondToCommand(&BroadcastDeck{}, stream)
 	case "PushTag":
-		p.tag = *nCmd.Tag
+		return
 	case "CanRequestHand":
 		p.ExecuteCommand(&RequestHandCommand{})
 	case "RequestHand": // Someone is requesting the keys to their hand
@@ -170,8 +175,8 @@ func (p *GokerPeer) handleStream(stream network.Stream) {
 		channelmanager.TGUI_StartRound <- struct{}{} // Tell GUI to move to the table UI
 	case "Raise":
 		p.gameState.PlayerRaise(stream.Conn().RemotePeer(), nCmd.Payload.(float64))
-		p.gameState.NextTurn()
 		p.RespondToCommand(&RaiseCommand{}, stream)
+		p.gameState.NextTurn()
 	case "Fold":
 		p.DecryptRoundDeckWithPayload(nCmd.Payload.(string))
 		p.gameState.PlayerFold(stream.Conn().RemotePeer())
@@ -179,12 +184,12 @@ func (p *GokerPeer) handleStream(stream network.Stream) {
 		p.gameState.NextTurn()
 	case "Call":
 		p.gameState.PlayerCall(stream.Conn().RemotePeer())
-		p.gameState.NextTurn()
 		p.RespondToCommand(&CallCommand{}, stream)
+		p.gameState.NextTurn()
 	case "Check":
 		p.gameState.PlayerCheck(stream.Conn().RemotePeer())
-		p.gameState.NextTurn()
 		p.RespondToCommand(&CheckCommand{}, stream)
+		p.gameState.NextTurn()
 	case "RequestFlop":
 		p.RespondToCommand(&RequestFlop{}, stream)
 	case "RequestTurn":

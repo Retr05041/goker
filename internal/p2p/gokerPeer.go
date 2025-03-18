@@ -130,8 +130,6 @@ func (p *GokerPeer) BreakTimeLockedPuzzle(peerID peer.ID, puzzlePayload []byte) 
 	iterations, _ := new(big.Int).SetString(message.Iter, 10)
 	n, _ := new(big.Int).SetString(message.N, 10)
 
-	fmt.Printf("Received time-locked puzzle from %s, beginning decryption...\n", &message)
-
 	// Step 1: Set base
 	base := big.NewInt(2)
 
