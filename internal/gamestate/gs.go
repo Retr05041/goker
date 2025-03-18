@@ -310,7 +310,9 @@ func (gs *GameState) PlayerRaise(peerID peer.ID, bet float64) {
 		gs.PlayedThisPhase[id] = false // We need to make the others call or raise or fold again
 	}
 
-	gs.MyBet += bet
+	if peerID == gs.Me {
+		gs.MyBet += bet
+	}
 	gs.PlayedThisPhase[peerID] = true // Person who raised did in fact play this round
 }
 
