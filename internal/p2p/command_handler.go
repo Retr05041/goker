@@ -103,11 +103,14 @@ func (p *GokerPeer) handleStream(stream network.Stream) {
 	switch nCmd.Command {
 	case "GetPeers":
 		p.RespondToCommand(&GetPeerListCommand{}, stream)
-	case "RequestPubKey":
-		p.RespondToCommand(&RequestPubKeyCommand{}, stream)
+	case "PubKeyExchange":
+		p.Keyring.SetPeerPublicKey(stream.Conn().RemotePeer(), nCmd.Payload.(string))
+		p.RespondToCommand(&PubKeyExchangeCommand{}, stream)
 	case "NicknameRequest":
+		p.verifyCommand(stream.Conn().RemotePeer(), &nCmd)
 		p.RespondToCommand(&NicknameRequestCommand{}, stream)
 	case "InitTable":
+		p.verifyCommand(stream.Conn().RemotePeer(), &nCmd)
 		p.SetTurnOrderWithLobby()
 		p.gameState.FreshStateFromPayload(nCmd.Payload.(string))
 		channelmanager.TGUI_PlayerInfo <- p.gameState.GetPlayerInfo()
@@ -224,11 +227,21 @@ func (gpl *GetPeerListCommand) Respond(p *GokerPeer, sendingStream network.Strea
 }
 
 // Get signature data
-type RequestPubKeyCommand struct{}
+type PubKeyExchangeCommand struct{}
 
-func (rpk *RequestPubKeyCommand) Execute(p *GokerPeer) {
+func (pke *PubKeyExchangeCommand) Execute(p *GokerPeer) {
 	p.peerListMutex.Lock()
 	defer p.peerListMutex.Unlock()
+
+	key, err := p.Keyring.ExportPublicKey()
+	if err != nil {
+		log.Fatalf("%v\n", err)
+	}
+
+	request := NetworkCommand{
+		Command: "PubKeyExchange",
+		Payload: key,
+	}
 
 	for _, peerInfo := range p.peerList {
 		if peerInfo.ID == p.ThisHost.ID() {
@@ -240,35 +253,30 @@ func (rpk *RequestPubKeyCommand) Execute(p *GokerPeer) {
 
 		stream, err := p.ThisHost.NewStream(context.Background(), peerInfo.ID, protocolID)
 		if err != nil {
-			log.Printf("RequestPubKeyCommand: failed to create stream to peer %s: %v\n", peerInfo.ID, err)
+			log.Printf("PubKeyExchangeCommand: failed to create stream to peer %s: %v\n", peerInfo.ID, err)
 			return
 		}
 		defer stream.Close()
 
-		request := NetworkCommand{
-			Command: "RequestPubKey",
-			Payload: nil,
-		}
-
 		if err := sendCommand(stream, request); err != nil {
-			log.Printf("RequestPubKeyCommand: failed to send request: %v", err)
+			log.Printf("PubKeyExchangeCommand: failed to send request: %v", err)
 		}
 
 		response, err := receiveResponse(stream)
 		if err != nil {
-			log.Fatalf("RequestPubKeyCommand: failed to read response from peer %s: %v\n", peerInfo.ID, err)
+			log.Fatalf("PubKeyExchangeCommand: failed to read response from peer %s: %v\n", peerInfo.ID, err)
 		}
 
 		keyPayload, ok := response.Payload.(string)
 		if !ok {
-			log.Fatalf("NicknameRequest: nickname not a string from peer: %v\n", peerInfo.ID)
+			log.Fatalf("PubKeyExchangeCommand: keys not a string from peer: %v\n", peerInfo.ID)
 		}
 
 		p.Keyring.SetPeerPublicKey(peerInfo.ID, keyPayload)
 	}
 }
 
-func (rpk *RequestPubKeyCommand) Respond(p *GokerPeer, sendingStream network.Stream) {
+func (pke *PubKeyExchangeCommand) Respond(p *GokerPeer, sendingStream network.Stream) {
 	defer sendingStream.Close()
 
 	key, err := p.Keyring.ExportPublicKey()
@@ -278,7 +286,7 @@ func (rpk *RequestPubKeyCommand) Respond(p *GokerPeer, sendingStream network.Str
 
 	// Respond with the peer's public key
 	response := NetworkCommand{
-		Command: "RequestPubKey",
+		Command: "PubKeyExchange",
 		Payload: key,
 	}
 
@@ -893,20 +901,22 @@ func (rh *RequestHandCommand) Respond(p *GokerPeer, sendingStream network.Stream
 
 type MoveToTableCommand struct{}
 
-func (mtt *MoveToTableCommand) Execute(peer *GokerPeer) {
-	peer.peerListMutex.Lock()
-	defer peer.peerListMutex.Unlock()
+func (mtt *MoveToTableCommand) Execute(p *GokerPeer) {
+	p.peerListMutex.Lock()
+	defer p.peerListMutex.Unlock()
 
 	command := NetworkCommand{
 		Command: "MoveToTable",
+		Payload: nil,
 	}
+	p.signCommand(&command)
 
-	for _, peerInfo := range peer.peerList {
-		if peerInfo.ID == peer.ThisHost.ID() {
+	for _, peerInfo := range p.peerList {
+		if peerInfo.ID == p.ThisHost.ID() {
 			continue
 		}
 
-		stream, err := peer.ThisHost.NewStream(context.Background(), peerInfo.ID, protocolID)
+		stream, err := p.ThisHost.NewStream(context.Background(), peerInfo.ID, protocolID)
 		if err != nil {
 			log.Printf("MoveToTable: Failed to create stream to host %s: %v\n", peerInfo.ID, err)
 			return
@@ -933,6 +943,7 @@ func (r *RaiseCommand) Execute(p *GokerPeer) {
 		Command: "Raise",
 		Payload: p.gameState.MyBet,
 	}
+	p.signCommand(&command)
 
 	for _, peerInfo := range p.peerList {
 		if peerInfo.ID == p.ThisHost.ID() {
@@ -954,6 +965,7 @@ func (r *RaiseCommand) Execute(p *GokerPeer) {
 		if err != nil {
 			log.Fatalf("Raise: failed to recieve a response from peer: %s: %v", peerInfo.ID, err)
 		}
+		p.verifyCommand(peerInfo.ID, &response)
 
 		approved, ok := response.Payload.(string)
 		if !ok {
@@ -972,6 +984,7 @@ func (r *RaiseCommand) Respond(p *GokerPeer, sendingStream network.Stream) {
 		Command: "Raise",
 		Payload: "APPROVED",
 	}
+	p.signCommand(&response)
 
 	if err := sendCommand(sendingStream, response); err != nil {
 		log.Fatalf("Raise: failed to send 'APPROVED': %v", err)
@@ -988,6 +1001,7 @@ func (f *FoldCommand) Execute(p *GokerPeer) {
 		Command: "Fold",
 		Payload: p.Keyring.KeyringPayload,
 	}
+	p.signCommand(&command)
 
 	for _, peerInfo := range p.peerList {
 		if peerInfo.ID == p.ThisHost.ID() {
@@ -1009,6 +1023,7 @@ func (f *FoldCommand) Execute(p *GokerPeer) {
 		if err != nil {
 			log.Fatalf("Fold: failed to recieve a response from peer: %s: %v", peerInfo.ID, err)
 		}
+		p.verifyCommand(peerInfo.ID, &response)
 
 		approved, ok := response.Payload.(string)
 		if !ok {
@@ -1026,6 +1041,7 @@ func (f *FoldCommand) Respond(p *GokerPeer, sendingStream network.Stream) {
 		Command: "Fold",
 		Payload: "APPROVED",
 	}
+	p.signCommand(&response)
 
 	if err := sendCommand(sendingStream, response); err != nil {
 		log.Fatalf("Fold: failed to send 'APPROVED': %v", err)
@@ -1040,7 +1056,9 @@ func (c *CallCommand) Execute(p *GokerPeer) {
 
 	command := NetworkCommand{
 		Command: "Call",
+		Payload: nil,
 	}
+	p.signCommand(&command)
 
 	for _, peerInfo := range p.peerList {
 		if peerInfo.ID == p.ThisHost.ID() {
@@ -1062,6 +1080,7 @@ func (c *CallCommand) Execute(p *GokerPeer) {
 		if err != nil {
 			log.Fatalf("Call: failed to recieve a response from peer: %s: %v", peerInfo.ID, err)
 		}
+		p.verifyCommand(peerInfo.ID, &response)
 
 		approved, ok := response.Payload.(string)
 		if !ok {
@@ -1079,6 +1098,7 @@ func (c *CallCommand) Respond(p *GokerPeer, sendingStream network.Stream) {
 		Command: "Call",
 		Payload: "APPROVED",
 	}
+	p.signCommand(&response)
 
 	if err := sendCommand(sendingStream, response); err != nil {
 		log.Fatalf("Call: failed to send 'APPROVED': %v", err)
@@ -1093,7 +1113,9 @@ func (c *CheckCommand) Execute(p *GokerPeer) {
 
 	command := NetworkCommand{
 		Command: "Check",
+		Payload: nil,
 	}
+	p.signCommand(&command)
 
 	for _, peerInfo := range p.peerList {
 		if peerInfo.ID == p.ThisHost.ID() {
@@ -1115,6 +1137,7 @@ func (c *CheckCommand) Execute(p *GokerPeer) {
 		if err != nil {
 			log.Fatalf("Check: failed to recieve a response from peer: %s: %v", peerInfo.ID, err)
 		}
+		p.verifyCommand(peerInfo.ID, &response)
 
 		approved, ok := response.Payload.(string)
 		if !ok {
@@ -1132,6 +1155,7 @@ func (c *CheckCommand) Respond(p *GokerPeer, sendingStream network.Stream) {
 		Command: "Check",
 		Payload: "APPROVED",
 	}
+	p.signCommand(&response)
 
 	if err := sendCommand(sendingStream, response); err != nil {
 		log.Fatalf("Check: failed to send 'APPROVED': %v", err)
@@ -1143,9 +1167,9 @@ func (c *CheckCommand) Respond(p *GokerPeer, sendingStream network.Stream) {
 
 type RequestFlop struct{}
 
-func (rf *RequestFlop) Execute(peer *GokerPeer) {
-	peer.peerListMutex.Lock()
-	defer peer.peerListMutex.Unlock()
+func (rf *RequestFlop) Execute(p *GokerPeer) {
+	p.peerListMutex.Lock()
+	defer p.peerListMutex.Unlock()
 
 	var cardOneKeys []string
 	var cardTwoKeys []string
@@ -1153,14 +1177,16 @@ func (rf *RequestFlop) Execute(peer *GokerPeer) {
 
 	command := NetworkCommand{
 		Command: "RequestFlop",
+		Payload: nil,
 	}
+	p.signCommand(&command)
 
-	for _, peerInfo := range peer.peerList {
-		if peerInfo.ID == peer.ThisHost.ID() || peer.gameState.FoldedPlayers[peerInfo.ID] { // If it's us or the person has folded
+	for _, peerInfo := range p.peerList {
+		if peerInfo.ID == p.ThisHost.ID() || p.gameState.FoldedPlayers[peerInfo.ID] { // If it's us or the person has folded
 			continue
 		}
 
-		stream, err := peer.ThisHost.NewStream(context.Background(), peerInfo.ID, protocolID)
+		stream, err := p.ThisHost.NewStream(context.Background(), peerInfo.ID, protocolID)
 		if err != nil {
 			log.Printf("RequestFlop: Failed to create stream to host %s: %v\n", peerInfo.ID, err)
 			return
@@ -1175,6 +1201,7 @@ func (rf *RequestFlop) Execute(peer *GokerPeer) {
 		if err != nil {
 			log.Fatalf("RequestFlop: failed to recieve response from peer: %s", peerInfo.ID)
 		}
+		p.verifyCommand(peerInfo.ID, &response)
 
 		keyPayload, ok := response.Payload.(string)
 		if !ok {
@@ -1187,26 +1214,27 @@ func (rf *RequestFlop) Execute(peer *GokerPeer) {
 		cardThreeKeys = append(cardThreeKeys, keys[2])
 	}
 
-	peer.DecryptFlop(cardOneKeys, cardTwoKeys, cardThreeKeys)
+	p.DecryptFlop(cardOneKeys, cardTwoKeys, cardThreeKeys)
 
-	cardOneName, exists := peer.Deck.GetCardFromRefDeck(peer.Flop[0].CardValue)
-	cardTwoName, exists2 := peer.Deck.GetCardFromRefDeck(peer.Flop[1].CardValue)
-	cardThreeName, exists3 := peer.Deck.GetCardFromRefDeck(peer.Flop[2].CardValue)
+	cardOneName, exists := p.Deck.GetCardFromRefDeck(p.Flop[0].CardValue)
+	cardTwoName, exists2 := p.Deck.GetCardFromRefDeck(p.Flop[1].CardValue)
+	cardThreeName, exists3 := p.Deck.GetCardFromRefDeck(p.Flop[2].CardValue)
 
 	if exists && exists2 && exists3 {
-		peer.sendBoardToGUI(&cardOneName, &cardTwoName, &cardThreeName, nil, nil)
+		p.sendBoardToGUI(&cardOneName, &cardTwoName, &cardThreeName, nil, nil)
 		return
 	}
 
 	log.Fatalf("RequestFlop: could not retrieve keys, aborting.")
 }
 
-func (rf *RequestFlop) Respond(peer *GokerPeer, sendingStream network.Stream) {
-	payload := peer.GetKeyPayloadForFlop()
+func (rf *RequestFlop) Respond(p *GokerPeer, sendingStream network.Stream) {
+	payload := p.GetKeyPayloadForFlop()
 	response := NetworkCommand{
 		Command: "RequestFlop",
 		Payload: payload,
 	}
+	p.signCommand(&response)
 
 	if err := sendCommand(sendingStream, response); err != nil {
 		log.Fatalf("RequestFlop: failed to send keys back to peer: %v", err)
@@ -1215,22 +1243,24 @@ func (rf *RequestFlop) Respond(peer *GokerPeer, sendingStream network.Stream) {
 
 type RequestTurn struct{}
 
-func (rt *RequestTurn) Execute(peer *GokerPeer) {
-	peer.peerListMutex.Lock()
-	defer peer.peerListMutex.Unlock()
+func (rt *RequestTurn) Execute(p *GokerPeer) {
+	p.peerListMutex.Lock()
+	defer p.peerListMutex.Unlock()
 
 	var turnKeys []string
 
 	command := NetworkCommand{
 		Command: "RequestTurn",
+		Payload: nil,
 	}
+	p.signCommand(&command)
 
-	for _, peerInfo := range peer.peerList {
-		if peerInfo.ID == peer.ThisHost.ID() || peer.gameState.FoldedPlayers[peerInfo.ID] {
+	for _, peerInfo := range p.peerList {
+		if peerInfo.ID == p.ThisHost.ID() || p.gameState.FoldedPlayers[peerInfo.ID] {
 			continue
 		}
 
-		stream, err := peer.ThisHost.NewStream(context.Background(), peerInfo.ID, protocolID)
+		stream, err := p.ThisHost.NewStream(context.Background(), peerInfo.ID, protocolID)
 		if err != nil {
 			log.Printf("RequestTurn: Failed to create stream to host %s: %v\n", peerInfo.ID, err)
 			return
@@ -1245,6 +1275,7 @@ func (rt *RequestTurn) Execute(peer *GokerPeer) {
 		if err != nil {
 			log.Fatalf("RequestTurn: failed to recieve response from peer: %s", peerInfo.ID)
 		}
+		p.verifyCommand(peerInfo.ID, &response)
 
 		keyPayload, ok := response.Payload.(string)
 		if !ok {
@@ -1254,27 +1285,28 @@ func (rt *RequestTurn) Execute(peer *GokerPeer) {
 		turnKeys = append(turnKeys, keyPayload) // since it should only be one key at at ime
 	}
 
-	peer.DecryptTurn(turnKeys)
+	p.DecryptTurn(turnKeys)
 
-	cardOneName, exists := peer.Deck.GetCardFromRefDeck(peer.Flop[0].CardValue)
-	cardTwoName, exists1 := peer.Deck.GetCardFromRefDeck(peer.Flop[1].CardValue)
-	cardThreeName, exists2 := peer.Deck.GetCardFromRefDeck(peer.Flop[2].CardValue)
-	cardFourName, exists3 := peer.Deck.GetCardFromRefDeck(peer.Turn.CardValue)
+	cardOneName, exists := p.Deck.GetCardFromRefDeck(p.Flop[0].CardValue)
+	cardTwoName, exists1 := p.Deck.GetCardFromRefDeck(p.Flop[1].CardValue)
+	cardThreeName, exists2 := p.Deck.GetCardFromRefDeck(p.Flop[2].CardValue)
+	cardFourName, exists3 := p.Deck.GetCardFromRefDeck(p.Turn.CardValue)
 
 	if exists && exists1 && exists2 && exists3 {
-		peer.sendBoardToGUI(&cardOneName, &cardTwoName, &cardThreeName, &cardFourName, nil)
+		p.sendBoardToGUI(&cardOneName, &cardTwoName, &cardThreeName, &cardFourName, nil)
 		return
 	}
 
 	log.Fatalf("RequestTurn: could not retrieve keys, aborting.")
 }
 
-func (rt *RequestTurn) Respond(peer *GokerPeer, sendingStream network.Stream) {
-	payload := peer.GetKeyPayloadForTurn()
+func (rt *RequestTurn) Respond(p *GokerPeer, sendingStream network.Stream) {
+	payload := p.GetKeyPayloadForTurn()
 	response := NetworkCommand{
 		Command: "RequestTurn",
 		Payload: payload,
 	}
+	p.signCommand(&response)
 
 	if err := sendCommand(sendingStream, response); err != nil {
 		log.Fatalf("RequestTurn: failed to send keys back to peer: %v", err)
@@ -1283,22 +1315,24 @@ func (rt *RequestTurn) Respond(peer *GokerPeer, sendingStream network.Stream) {
 
 type RequestRiver struct{}
 
-func (rr *RequestRiver) Execute(peer *GokerPeer) {
-	peer.peerListMutex.Lock()
-	defer peer.peerListMutex.Unlock()
+func (rr *RequestRiver) Execute(p *GokerPeer) {
+	p.peerListMutex.Lock()
+	defer p.peerListMutex.Unlock()
 
 	var riverKeys []string
 
 	command := NetworkCommand{
 		Command: "RequestRiver",
+		Payload: nil,
 	}
+	p.signCommand(&command)
 
-	for _, peerInfo := range peer.peerList {
-		if peerInfo.ID == peer.ThisHost.ID() || peer.gameState.FoldedPlayers[peerInfo.ID] {
+	for _, peerInfo := range p.peerList {
+		if peerInfo.ID == p.ThisHost.ID() || p.gameState.FoldedPlayers[peerInfo.ID] {
 			continue
 		}
 
-		stream, err := peer.ThisHost.NewStream(context.Background(), peerInfo.ID, protocolID)
+		stream, err := p.ThisHost.NewStream(context.Background(), peerInfo.ID, protocolID)
 		if err != nil {
 			log.Printf("RequestRiver: Failed to create stream to host %s: %v\n", peerInfo.ID, err)
 			return
@@ -1313,6 +1347,7 @@ func (rr *RequestRiver) Execute(peer *GokerPeer) {
 		if err != nil {
 			log.Fatalf("RequestRiver: failed to recieve response from peer: %s", peerInfo.ID)
 		}
+		p.verifyCommand(peerInfo.ID, &response)
 
 		keyPayload, ok := response.Payload.(string)
 		if !ok {
@@ -1322,28 +1357,29 @@ func (rr *RequestRiver) Execute(peer *GokerPeer) {
 		riverKeys = append(riverKeys, keyPayload)
 	}
 
-	peer.DecryptRiver(riverKeys)
+	p.DecryptRiver(riverKeys)
 
-	cardOneName, exists := peer.Deck.GetCardFromRefDeck(peer.Flop[0].CardValue)
-	cardTwoName, exists1 := peer.Deck.GetCardFromRefDeck(peer.Flop[1].CardValue)
-	cardThreeName, exists2 := peer.Deck.GetCardFromRefDeck(peer.Flop[2].CardValue)
-	cardFourName, exists3 := peer.Deck.GetCardFromRefDeck(peer.Turn.CardValue)
-	cardFiveName, exists4 := peer.Deck.GetCardFromRefDeck(peer.River.CardValue)
+	cardOneName, exists := p.Deck.GetCardFromRefDeck(p.Flop[0].CardValue)
+	cardTwoName, exists1 := p.Deck.GetCardFromRefDeck(p.Flop[1].CardValue)
+	cardThreeName, exists2 := p.Deck.GetCardFromRefDeck(p.Flop[2].CardValue)
+	cardFourName, exists3 := p.Deck.GetCardFromRefDeck(p.Turn.CardValue)
+	cardFiveName, exists4 := p.Deck.GetCardFromRefDeck(p.River.CardValue)
 
 	if exists && exists1 && exists2 && exists3 && exists4 {
-		peer.sendBoardToGUI(&cardOneName, &cardTwoName, &cardThreeName, &cardFourName, &cardFiveName)
+		p.sendBoardToGUI(&cardOneName, &cardTwoName, &cardThreeName, &cardFourName, &cardFiveName)
 		return
 	}
 
 	log.Fatalf("RequestTurn: could not retrieve keys, aborting.")
 }
 
-func (rr *RequestRiver) Respond(peer *GokerPeer, sendingStream network.Stream) {
-	payload := peer.GetKeyPayloadForRiver()
+func (rr *RequestRiver) Respond(p *GokerPeer, sendingStream network.Stream) {
+	payload := p.GetKeyPayloadForRiver()
 	response := NetworkCommand{
 		Command: "RequestRiver",
 		Payload: payload,
 	}
+	p.signCommand(&response)
 
 	if err := sendCommand(sendingStream, response); err != nil {
 		log.Fatalf("RequestRiver: failed to send keys back to peer: %v", err)
@@ -1354,20 +1390,22 @@ func (rr *RequestRiver) Respond(peer *GokerPeer, sendingStream network.Stream) {
 
 type RequestOthersHands struct{}
 
-func (r *RequestOthersHands) Execute(peer *GokerPeer) {
-	peer.peerListMutex.Lock()
-	defer peer.peerListMutex.Unlock()
+func (r *RequestOthersHands) Execute(p *GokerPeer) {
+	p.peerListMutex.Lock()
+	defer p.peerListMutex.Unlock()
 
 	command := NetworkCommand{
 		Command: "RequestOthersHand",
+		Payload: nil,
 	}
+	p.signCommand(&command)
 
-	for _, peerInfo := range peer.peerList {
-		if peerInfo.ID == peer.ThisHost.ID() || peer.gameState.FoldedPlayers[peerInfo.ID] {
+	for _, peerInfo := range p.peerList {
+		if peerInfo.ID == p.ThisHost.ID() || p.gameState.FoldedPlayers[peerInfo.ID] {
 			continue
 		}
 
-		stream, err := peer.ThisHost.NewStream(context.Background(), peerInfo.ID, protocolID)
+		stream, err := p.ThisHost.NewStream(context.Background(), peerInfo.ID, protocolID)
 		if err != nil {
 			log.Printf("RequestHand: Failed to create stream to host %s: %v\n", peerInfo.ID, err)
 			return
@@ -1382,22 +1420,24 @@ func (r *RequestOthersHands) Execute(peer *GokerPeer) {
 		if err != nil {
 			log.Fatalf("RequestHand: failed to recieve response from peer: %s", peerInfo.ID)
 		}
+		p.verifyCommand(peerInfo.ID, &response)
 
 		keyPayload, ok := response.Payload.(string)
 		if !ok {
 			log.Fatalf("RequestHand: invalid response format: expected string, got %T", response.Payload)
 		}
 
-		peer.DecryptOthersHand(peerInfo.ID, strings.Split(keyPayload, "\n"))
+		p.DecryptOthersHand(peerInfo.ID, strings.Split(keyPayload, "\n"))
 	}
 }
 
-func (rh *RequestOthersHands) Respond(peer *GokerPeer, sendingStream network.Stream) {
-	payload := peer.GetKeyPayloadForMyHand()
+func (rh *RequestOthersHands) Respond(p *GokerPeer, sendingStream network.Stream) {
+	payload := p.GetKeyPayloadForMyHand()
 	response := NetworkCommand{
 		Command: "RequestOthersHand",
 		Payload: payload,
 	}
+	p.signCommand(&response)
 
 	if err := sendCommand(sendingStream, response); err != nil {
 		log.Fatalf("RequestOthersHand: failed to send keys back to peer: %v", err)
@@ -1414,7 +1454,9 @@ func (c *CanRequestPuzzle) Execute(p *GokerPeer) {
 
 	command := NetworkCommand{
 		Command: "CanRequestPuzzle",
+		Payload: nil,
 	}
+	p.signCommand(&command)
 
 	for _, peerInfo := range p.peerList {
 		if peerInfo.ID == p.ThisHost.ID() {
@@ -1443,7 +1485,9 @@ func (tlp *RequestPuzzleCommand) Execute(p *GokerPeer) {
 
 	command := NetworkCommand{
 		Command: "PuzzleExchange",
+		Payload: nil,
 	}
+	p.signCommand(&command)
 
 	for _, peerInfo := range p.peerList {
 		if peerInfo.ID == p.ThisHost.ID() || p.gameState.FoldedPlayers[peerInfo.ID] {
@@ -1465,6 +1509,7 @@ func (tlp *RequestPuzzleCommand) Execute(p *GokerPeer) {
 		if err != nil {
 			log.Fatalf("PuzzleExchange: failed to recieve response from peer: %s", peerInfo.ID)
 		}
+		p.verifyCommand(peerInfo.ID, &response)
 
 		puzzlePayload, ok := response.Payload.(string)
 		if !ok {
@@ -1489,6 +1534,7 @@ func (tlp *RequestPuzzleCommand) Respond(p *GokerPeer, sendingStream network.Str
 		Command: "PuzzleExchange",
 		Payload: string(payload),
 	}
+	p.signCommand(&response)
 
 	if err := sendCommand(sendingStream, response); err != nil {
 		log.Fatalf("RequestOthersHand: failed to send keys back to peer: %v", err)

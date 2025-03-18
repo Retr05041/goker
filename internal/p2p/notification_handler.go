@@ -31,8 +31,8 @@ func (p *GokerPeer) handleNotifications() {
 			// Update GUI
 			channelmanager.FNET_NumOfPlayersChan <- len(p.peerList)
 
-			// Request their pub key
-			p.ExecuteCommand(&RequestPubKeyCommand{})
+			// Exchange keys
+			p.ExecuteCommand(&PubKeyExchangeCommand{})
 
 			// Request Nickname from new peer
 			p.ExecuteCommand(&NicknameRequestCommand{})
