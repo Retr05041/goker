@@ -68,6 +68,8 @@ func gmListener(window fyne.Window) {
 			} else {
 				showConnectedUI(window)
 			}
+		case <-channelmanager.TGUI_ShowLoadingChan:
+			showLoadingScreen(window)
 		}
 	}
 }

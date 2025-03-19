@@ -147,6 +147,7 @@ func (p *GokerPeer) handleStream(stream network.Stream) {
 		channelmanager.TGUI_PlayerInfo <- p.gameState.GetPlayerInfo()
 		p.RespondToCommand(&InitTableCommand{}, stream) // Respond with DONE
 	case "SendPQ":
+		channelmanager.TGUI_ShowLoadingChan <- struct{}{}
 		pq := strings.Split(string(nCmd.Payload.(string)), "\n")
 		p.Keyring.SetPQ(pq[0], pq[1])
 		p.Keyring.GenerateKeys()

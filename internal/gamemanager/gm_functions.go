@@ -202,6 +202,8 @@ func (gm *GameManager) RestartRound() {
 
 // Run through setting up keyring, shuffling deck, and dealing
 func (gm *GameManager) RunProtocol() {
+	channelmanager.TGUI_ShowLoadingChan <- struct{}{}
+
 	// Setup keyring for this round
 	gm.network.Keyring.GeneratePQ()
 	gm.network.Keyring.GenerateKeys()
@@ -222,6 +224,8 @@ func (gm *GameManager) RunProtocol() {
 	// Get Puzzle from everyone
 	gm.network.ExecuteCommand(&p2p.CanRequestPuzzle{})     // Tell everyone they can request their puzzle
 	gm.network.ExecuteCommand(&p2p.RequestPuzzleCommand{}) // Everyone sends each others timelocked payload to each other and they all begin to crack it
+
+	gm.network.ExecuteCommand(&p2p.MoveToTableCommand{}) // Tell everyone to move to the game table
 }
 
 func (gm *GameManager) DecryptBoardIfNeeded() {

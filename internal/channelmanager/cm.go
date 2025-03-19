@@ -14,10 +14,11 @@ var (
 	TGUI_HandChan    chan []*canvas.Image // Current hand images
 	TGUI_BoardChan   chan []*canvas.Image // Current board images
 
-	TGUI_PotChan    chan float64 // Pot
-	TGUI_PlayerInfo chan PlayerInfo
-	TGUI_StartRound chan struct{} // For telling the GUI to start the round
-	TGUI_EndRound   chan struct{} // For telling the GUI to start the round
+	TGUI_PotChan         chan float64 // Pot
+	TGUI_PlayerInfo      chan PlayerInfo
+	TGUI_StartRound      chan struct{} // For telling the GUI to start the round
+	TGUI_EndRound        chan struct{} // For telling the GUI to start the round
+	TGUI_ShowLoadingChan chan struct{} // Show the loading screen
 
 	// Channles for network (<- Network)
 	FNET_NetActionDoneChan chan struct{}
@@ -65,6 +66,7 @@ func Init() {
 	TGUI_PlayerInfo = make(chan PlayerInfo)
 	TGUI_StartRound = make(chan struct{})
 	TGUI_EndRound = make(chan struct{})
+	TGUI_ShowLoadingChan = make(chan struct{})
 
 	FNET_NetActionDoneChan = make(chan struct{})
 	FNET_NumOfPlayersChan = make(chan int)

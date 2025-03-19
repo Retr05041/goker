@@ -76,8 +76,6 @@ func (gm *GameManager) listenForActions() {
 
 				gm.RunProtocol()
 
-				gm.network.ExecuteCommand(&p2p.MoveToTableCommand{}) // Tell everyone to move to the game table
-
 				// If it's my turn, start the turn timer
 				if gm.state.IsMyTurn() {
 					gm.startTurnTimer()
