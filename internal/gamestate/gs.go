@@ -299,26 +299,32 @@ func (gs *GameState) GetTurnOrder() []peer.ID {
 func (gs *GameState) PlayerBet(peerID peer.ID, bet float64) {
 	gs.mu.Lock()
 	gs.PlayersMoney[peerID] -= bet // Lower players money
-	gs.BetHistory[peerID] += bet   // Update the best history for the round
-	gs.PhaseBets[peerID] += bet
+	gs.BetHistory[peerID] += bet   // Update the bet history for the round (pot)
+	gs.PhaseBets[peerID] += bet    // Update the players bet for this phase
 	gs.mu.Unlock()
 }
 
 func (gs *GameState) PlayerRaise(peerID peer.ID, bet float64) {
 	gs.PlayerBet(peerID, bet)
 	for id := range gs.PlayedThisPhase {
-		gs.PlayedThisPhase[id] = false // We need to make the others call or raise or fold again
+		gs.PlayedThisPhase[id] = false // We need to make the others call, raise or fold again
 	}
 
-	if peerID == gs.Me {
+	if peerID == gs.Me { // If it was me, update my personal bet
 		gs.MyBet += bet
 	}
 	gs.PlayedThisPhase[peerID] = true // Person who raised did in fact play this round
 }
 
 func (gs *GameState) PlayerCall(peerID peer.ID) {
-	gs.PlayerBet(peerID, gs.GetHighestbetThisPhase())
-	gs.MyBet = gs.GetHighestbetThisPhase()
+	highestBet := gs.GetHighestbetThisPhase()
+	currentBet := gs.PhaseBets[peerID] // Get the player's current bet
+	amountToCall := highestBet - currentBet
+
+	gs.PlayerBet(peerID, amountToCall) // Make them bet only the difference
+	if peerID == gs.Me {               // If it's me
+		gs.MyBet = highestBet
+	}
 	gs.PlayedThisPhase[peerID] = true
 }
 
