@@ -1,8 +1,6 @@
 package gui
 
 import (
-	"fmt"
-
 	"goker/internal/channelmanager"
 
 	"fyne.io/fyne/v2"
@@ -11,109 +9,96 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
+func setWindowContent(window fyne.Window, content fyne.CanvasObject) {
+	if window.Content() != content {
+		window.SetContent(content)
+		window.Resize(fyne.NewSize(float32(MAX_WIDTH), float32(MAX_HEIGHT))) // Ensure size consistency
+	}
+}
+
 // Main Menu
 func showMenuUI(givenWindow fyne.Window) {
-	var hostOrConnect string
-
-	inputedAddress := widget.NewEntry()
-	inputedAddress.SetPlaceHolder("Host address...")
-	inputedAddress.Disable()
-
-
 	banner := canvas.NewText("Goker", BLUE)
-	banner.TextSize = 24
+	banner.TextSize = 32
 	banner.TextStyle = fyne.TextStyle{Bold: true, Italic: false}
 	banner.Alignment = fyne.TextAlignCenter
 
-	submit := widget.NewButton("Submit", func() {
-		fmt.Println("Choice made: ", hostOrConnect)
-		channelmanager.HostConnectChannel <- hostOrConnect
-		if hostOrConnect == "Connect" {
-			showConnectedUI(givenWindow)
-		} else if hostOrConnect == "Host" {
+	nickname := widget.NewEntry()
+	nickname.SetPlaceHolder("Nickname...")
+
+	inputedAddress := widget.NewEntry()
+	inputedAddress.SetPlaceHolder("Host address...")
+
+	host := widget.NewButton("Host", func() {
+		if nickname.Text != "" {
+			channelmanager.FGUI_ActionChan <- channelmanager.ActionType{Action: "hostOrConnectPressed", DataS: []string{nickname.Text}}
+			isHost = true
 			showHostUI(givenWindow)
 		}
 	})
-	submit.Disable()
 
-	peerType := widget.NewRadioGroup([]string{"Host", "Connect"}, func(value string) {
-		submit.Enable()
-		if value == "Connect" {
-			inputedAddress.Enable()
-		} else {
-			inputedAddress.Disable()
+	connect := widget.NewButton("Connect", func() {
+		if nickname.Text != "" {
+			if inputedAddress.Text != "" {
+				channelmanager.FGUI_ActionChan <- channelmanager.ActionType{Action: "hostOrConnectPressed", DataS: []string{nickname.Text, inputedAddress.Text}}
+				showConnectedUI(givenWindow)
+			}
 		}
-		hostOrConnect = value
 	})
 
-
-	
-	givenWindow.SetContent(
+	setWindowContent(givenWindow,
 		container.NewCenter(
 			container.NewGridWrap(
-				fyne.NewSize(float32(MAX_WIDTH), float32(MAX_HEIGHT)), 
-				container.NewVBox(banner, peerType, inputedAddress, submit))))
+				fyne.NewSize(float32(MAX_WIDTH)/2, float32(MAX_HEIGHT)/2),
+				container.NewVBox(banner, nickname, host, container.NewGridWithColumns(2, connect, inputedAddress)))))
 }
 
 // Host UI is the same as connectedUI but without settings
 func showHostUI(givenWindow fyne.Window) {
-	thankLabel := widget.NewLabel("Playing as Host!")
+	playButton := widget.NewButton("Play", func() {
+		channelmanager.FGUI_ActionChan <- channelmanager.ActionType{Action: "startRound"}
+	})
+	copyLBAddrButton := widget.NewButton("Copy LB address", func() {
+		givenWindow.Clipboard().SetContent(loopbackAddress)
+	})
+	copyLNAddrButton := widget.NewButton("Copy LAN address", func() {
+		givenWindow.Clipboard().SetContent(lanAddress)
+	})
 
-	givenWindow.SetContent(
-		container.NewVBox(thankLabel))
+	setWindowContent(givenWindow,
+		container.NewCenter(
+			container.NewVBox(
+				numOfPlayers,
+				container.NewHBox(copyLBAddrButton, copyLNAddrButton),
+				playButton)))
 }
 
 // Connected UI is just a waiting area for the host to start
-func showConnectedUI(myWindow fyne.Window) {
-	thankLabel := widget.NewLabel("Connected to Host!")
-
-	myWindow.SetContent(
-		container.NewVBox(thankLabel))
+func showConnectedUI(givenWindow fyne.Window) {
+	waiting := widget.NewLabel("Waiting for host to begin game!")
+	setWindowContent(givenWindow,
+		container.NewCenter(
+			container.NewVBox(numOfPlayers, waiting)))
 }
 
 // Main game screen
 func showGameScreen(givenWindow fyne.Window) {
-
-	foldButton := widget.NewButton("Fold", func() {
-		channelmanager.ActionChannel <- channelmanager.ActionType{
-			Action: "Fold",
-			Data: nil,
-		}
-	})
-	raiseButton := widget.NewButton("Raise", func() {
-		channelmanager.ActionChannel <- channelmanager.ActionType{
-			Action: "Raise",
-			Data: &betSlider.Value,
-		}
-	})
-	callButton := widget.NewButton("Call", func() {
-		channelmanager.ActionChannel <- channelmanager.ActionType{
-			Action: "Call",
-			Data: nil,
-		}
-	})
-	checkButton := widget.NewButton("Check", func() {
-		channelmanager.ActionChannel <- channelmanager.ActionType{
-			Action: "Check",
-			Data: nil,
-		}
-	})
-
-	givenWindow.SetContent(
-		container.NewCenter(
-			container.NewVBox(
-			container.NewCenter(potLabel),
-			boardGrid,
-			container.NewPadded(
-				container.NewCenter(
-					container.NewVBox(
-						container.NewCenter(moneyLabel),
+	setWindowContent(givenWindow,
+		container.NewBorder(
+			nil,
+			nil,
+			playerCards,
+			container.NewCenter(
+				container.NewVBox(
+					container.NewCenter(potLabel),
+					boardGrid,
+					container.NewCenter(
 						container.NewHBox(
-								handGrid, 
-								container.NewVBox(
-									foldButton, 
-									callButton, 
-									container.NewHBox(raiseButton, valueLabel), 
-									betSlider),
-								checkButton)))))))
+							handGrid,
+							container.NewVBox(
+								foldButton,
+								callButton,
+								container.NewHBox(raiseButton, valueLabel),
+								betSlider),
+							checkButton))))))
 }

@@ -6,30 +6,74 @@ import (
 
 var (
 	// Channels for user input (<- GUI)
-	InitHandAndBoard   chan bool
-	HostConnectChannel chan string
-	ActionChannel      chan ActionType
+	FGUI_InitChan   chan bool
+	FGUI_ActionChan chan ActionType
 
 	// Channels for specific elements in the UI (-> GUI)
-	HandChannel    chan []*canvas.Image
-	BoardChannel   chan []*canvas.Image
-	PotChannel     chan float64
-	MyMoneyChannel chan float64
+	TGUI_AddressChan chan []string        // Host address - Set during init
+	TGUI_HandChan    chan []*canvas.Image // Current hand images
+	TGUI_BoardChan   chan []*canvas.Image // Current board images
+
+	TGUI_PotChan    chan float64 // Pot
+	TGUI_PlayerInfo chan PlayerInfo
+	TGUI_StartRound chan struct{} // For telling the GUI to start the round
+	TGUI_EndRound   chan struct{} // For telling the GUI to start the round
+
+	// Channles for network (<- Network)
+	FNET_NetActionDoneChan chan struct{}
+	FNET_NumOfPlayersChan  chan int
+	FNET_StartRoundChan    chan bool
+
+	// Game state to be sent from game manager to network - Singular channels will be used to communicate with GUI
+	TNET_ActionChan chan ActionType
+
+	TGM_PhaseCheck      chan struct{} // Used when switching turns, will make gm check if there is a phase shift needed
+	TGM_EndRound        chan struct{} // For state telling the GM that this round is over and to reset and move to next round
+	TGS_PhaseSwitchDone chan struct{} // For the GM to tell the GS to continue with the "Next Turn" as the phase has been switched
+	TGM_WaitForPuzzles  chan struct{}
 )
 
+// Actions made by the user on the GUI
 type ActionType struct {
 	Action string
-	Data   *float64
+
+	// Possible data needed for an action
+	DataF float64
+	DataS []string
+}
+
+// Player info for the GUI to use - sent from the game manager
+type PlayerInfo struct {
+	Players            []string
+	Money              []float64
+	Me                 string
+	HighestBet         float64 // Highest bet by the users so far
+	WhosTurn           string  // the nickname
+	MyBetsForThisPhase float64 // What I have bet so far
 }
 
 // Initialize all channels
 func Init() {
-	InitHandAndBoard = make(chan bool)
-	HostConnectChannel = make(chan string)
-	ActionChannel = make(chan ActionType)
+	FGUI_InitChan = make(chan bool)
+	FGUI_ActionChan = make(chan ActionType)
 
-	HandChannel = make(chan []*canvas.Image)
-	BoardChannel = make(chan []*canvas.Image)
-	PotChannel = make(chan float64)
-	MyMoneyChannel = make(chan float64)
+	TGUI_AddressChan = make(chan []string)
+	TGUI_HandChan = make(chan []*canvas.Image)
+	TGUI_BoardChan = make(chan []*canvas.Image)
+
+	TGUI_PotChan = make(chan float64)
+	TGUI_PlayerInfo = make(chan PlayerInfo)
+	TGUI_StartRound = make(chan struct{})
+	TGUI_EndRound = make(chan struct{})
+
+	FNET_NetActionDoneChan = make(chan struct{})
+	FNET_NumOfPlayersChan = make(chan int)
+	FNET_StartRoundChan = make(chan bool)
+
+	TNET_ActionChan = make(chan ActionType)
+
+	TGM_PhaseCheck = make(chan struct{})
+	TGM_EndRound = make(chan struct{})
+	TGS_PhaseSwitchDone = make(chan struct{})
+	TGM_WaitForPuzzles = make(chan struct{})
 }
