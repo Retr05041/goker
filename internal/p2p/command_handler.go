@@ -1600,7 +1600,7 @@ func (tlp *RequestPuzzleCommand) Execute(p *GokerPeer) {
 func (tlp *RequestPuzzleCommand) Respond(p *GokerPeer, sendingStream network.Stream) {
 	numOfPlayers := p.gameState.GetNumberOfPlayers()
 	numOfPhases := 4                                                            // Accounts for Preflop, Flop, Turn, and River
-	p.Keyring.GenerateTimeLockedPuzzle(int64(30*numOfPlayers*numOfPhases + 30)) // + 30 to account for threshold
+	p.Keyring.GenerateTimeLockedPuzzle(int64(15*numOfPlayers*numOfPhases + 30)) // + 30 to account for threshold
 
 	payload, err := json.Marshal(p.Keyring.TLP)
 	if err != nil {

@@ -352,7 +352,7 @@ func (gs *GameState) NextTurn() {
 
 	// If someone left, ensure we properly handle ending the round at the right time
 	if gs.SomeoneLeft {
-		log.Println("Someone left, checking if we need to end the round...")
+		log.Println("Someone left, checking if we need to end the round (i.e. is there others non-folded that need play)...")
 		if nonFoldedCount == 1 {
 			gs.EndRound()
 			return

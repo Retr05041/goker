@@ -33,7 +33,7 @@ func showMenuUI(givenWindow fyne.Window) {
 		if nickname.Text != "" {
 			channelmanager.FGUI_ActionChan <- channelmanager.ActionType{Action: "hostOrConnectPressed", DataS: []string{nickname.Text}}
 			isHost = true
-			showHostUI(givenWindow)
+			showLoadingScreen(givenWindow)
 		}
 	})
 
@@ -41,7 +41,7 @@ func showMenuUI(givenWindow fyne.Window) {
 		if nickname.Text != "" {
 			if inputedAddress.Text != "" {
 				channelmanager.FGUI_ActionChan <- channelmanager.ActionType{Action: "hostOrConnectPressed", DataS: []string{nickname.Text, inputedAddress.Text}}
-				showConnectedUI(givenWindow)
+				showLoadingScreen(givenWindow)
 			}
 		}
 	})

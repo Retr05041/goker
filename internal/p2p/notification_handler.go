@@ -55,10 +55,6 @@ func (p *GokerPeer) handleNotifications() {
 
 			// Update GUI of player leaving
 			channelmanager.TGUI_PlayerInfo <- p.gameState.GetPlayerInfo()
-
-			if p.gameState.TurnOrder[p.gameState.WhosTurn] == conn.RemotePeer() {
-				p.gameState.NextTurn()
-			}
 		},
 	})
 

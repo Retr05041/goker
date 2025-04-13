@@ -34,6 +34,7 @@ type Keyring struct {
 	// Time locking
 	TLP            *TimeLock
 	KeyringPayload string
+	squaringSpeed  int64
 
 	BrokenPuzzlePayloads []string // Save all broken puzzles from others for when eval happens
 }

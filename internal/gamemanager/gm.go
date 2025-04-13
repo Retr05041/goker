@@ -66,6 +66,7 @@ func (gm *GameManager) listenForActions() {
 				}
 				<-channelmanager.FNET_NetActionDoneChan                                                                 // Wait for network to be done setting up
 				channelmanager.TGUI_AddressChan <- []string{gm.network.ThisHostLBAddress, gm.network.ThisHostLNAddress} // Tell the GUI the addresses we need
+				channelmanager.TGUI_MoveToLobby <- len(givenAction.DataS) == 1
 			case "startRound": // TODO: This action should gather table rules for the state
 				gm.network.SetTurnOrderWithLobby()                 // Sets the turn order
 				gm.state.FreshState(nil, nil)                      // Initialize table settings after the lobby is populated
@@ -205,6 +206,7 @@ func (gm *GameManager) phaseListener() {
 func (gm *GameManager) roundChanger() {
 	for {
 		<-channelmanager.TGM_EndRound
+		gm.stopTurnTimerIfRunning()
 		gm.EvaluateHands()
 	}
 }
@@ -216,7 +218,7 @@ func (gm *GameManager) startTurnTimer() {
 	// Start a goroutine for the timer
 	go func() {
 		select {
-		case <-time.After(30 * time.Second):
+		case <-time.After(15 * time.Second):
 			if gm.state.IsMyTurn() {
 				fmt.Println("Time's up! Auto-folding...")
 				gm.state.PlayerFold(gm.state.Me)              // Fold the player

@@ -57,6 +57,7 @@ func (p *GokerPeer) Init(nickname string, hosting bool, givenAddr string, givenS
 	// Setup deck and keyring for later
 	p.Keyring = new(sra.Keyring)
 	p.Keyring.GenerateSigningKeys()
+	p.Keyring.CalibrateSquaringSpeed()
 
 	p.Deck = new(deckInfo)
 	p.OthersHands = make(map[peer.ID][]*CardInfo)

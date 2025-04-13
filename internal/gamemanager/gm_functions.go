@@ -46,7 +46,7 @@ func (gm *GameManager) EvaluateHands() {
 
 	if gm.state.SomeoneLeft {
 		log.Println("Waiting for all necessary puzzles to be broken before evaluation...")
-		for gm.state.NumOfPuzzlesBroken < len(gm.state.Players)-1 {
+		for gm.state.NumOfPuzzlesBroken < len(gm.state.Players) {
 			<-channelmanager.TGM_WaitForPuzzles
 		}
 		log.Println("All puzzles decrypted, decrypting deck.")

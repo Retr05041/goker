@@ -70,6 +70,12 @@ func gmListener(window fyne.Window) {
 			}
 		case <-channelmanager.TGUI_ShowLoadingChan:
 			showLoadingScreen(window)
+		case host := <-channelmanager.TGUI_MoveToLobby:
+			if host {
+				showHostUI(window)
+			} else {
+				showConnectedUI(window)
+			}
 		}
 	}
 }

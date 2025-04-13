@@ -46,7 +46,7 @@ func (k *Keyring) GenerateTimeLockedPuzzle(seconds int64) {
 
 	// Step 1: Determine `t` based on desired decryption delay (T in seconds)
 	// Experimentally chosen squaring speed
-	squaringSpeed := k.CalibrateSquaringSpeed(n) // Adjust based on actual hardware speed
+	squaringSpeed := k.squaringSpeed // Adjust based on actual hardware speed
 	iterations := new(big.Int).Mul(big.NewInt(seconds), big.NewInt(squaringSpeed))
 
 	// Step 2: Calculate `e = 2^t mod φ(n)`
@@ -69,7 +69,13 @@ func (k *Keyring) GenerateTimeLockedPuzzle(seconds int64) {
 	k.TLP.N = n.String()
 }
 
-func (k *Keyring) CalibrateSquaringSpeed(n *big.Int) int64 {
+func (k *Keyring) CalibrateSquaringSpeed() {
+	p, q, err := generateLargePrime(2048)
+	if err != nil {
+		fmt.Println(err)
+	}
+	n := new(big.Int).Mul(p, q)
+
 	// Set a large number of squarings to get an accurate measure.
 	const numSquarings = 1_000_000 // Adjust as needed for precision and timing.
 
@@ -92,7 +98,7 @@ func (k *Keyring) CalibrateSquaringSpeed(n *big.Int) int64 {
 	squaringSpeed := int64(float64(numSquarings) / elapsed)
 
 	fmt.Printf("Calibration complete: Estimated squaring speed is %d operations per second\n", squaringSpeed)
-	return squaringSpeed
+	k.squaringSpeed = squaringSpeed
 }
 
 // Encrypts plaintext with AES-256-GCM and returns the ciphertext in base64 format and key

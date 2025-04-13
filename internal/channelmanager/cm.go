@@ -19,6 +19,7 @@ var (
 	TGUI_StartRound      chan struct{} // For telling the GUI to start the round
 	TGUI_EndRound        chan struct{} // For telling the GUI to start the round
 	TGUI_ShowLoadingChan chan struct{} // Show the loading screen
+	TGUI_MoveToLobby     chan bool     // Move to lobby, bool is if host or not
 
 	// Channles for network (<- Network)
 	FNET_NetActionDoneChan chan struct{}
@@ -67,6 +68,7 @@ func Init() {
 	TGUI_StartRound = make(chan struct{})
 	TGUI_EndRound = make(chan struct{})
 	TGUI_ShowLoadingChan = make(chan struct{})
+	TGUI_MoveToLobby = make(chan bool)
 
 	FNET_NetActionDoneChan = make(chan struct{})
 	FNET_NumOfPlayersChan = make(chan int)
