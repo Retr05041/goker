@@ -400,7 +400,6 @@ func (gs *GameState) NextTurn() {
 	for !gs.isActivePlayer(gs.TurnOrder[nextValidPlayer]) {
 		nextValidPlayer = (nextValidPlayer + 1) % len(gs.TurnOrder)
 
-		// Optional: prevent infinite loops if logic breaks
 		if nextValidPlayer == gs.WhosTurn {
 			log.Println("No active players to take next turn.")
 			return

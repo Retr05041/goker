@@ -471,7 +471,6 @@ func (it *InitTableCommand) Respond(p *GokerPeer, sendingStream network.Stream) 
 ////////////////////////////////////////// KEYRING //////////////////////////////////////////////////////
 
 // Send P and Q to everyone for this rounds keyring
-// TODO: Find a better way to do this?
 type SendPQCommand struct{}
 
 func (pq *SendPQCommand) Execute(p *GokerPeer) {

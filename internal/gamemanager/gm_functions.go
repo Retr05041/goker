@@ -157,7 +157,6 @@ func convertMyCardStringsToLibrarys(myCardStrings []string) []poker.Card {
 	return converted
 }
 
-// RestartRound will be called when a game is being played and the round is over.
 // Will distribute pot and reset phase bets and restart the protocol
 func (gm *GameManager) RestartRound() {
 	// Distribute the pot to the winner

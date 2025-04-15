@@ -215,7 +215,6 @@ func (gm *GameManager) startTurnTimer() {
 	// Create a channel to stop the timer if the player makes a move
 	stopTimer := make(chan struct{})
 
-	// Start a goroutine for the timer
 	go func() {
 		select {
 		case <-time.After(15 * time.Second):
