@@ -1446,7 +1446,7 @@ func (rr *RequestRiver) Execute(p *GokerPeer) {
 		return
 	}
 
-	log.Fatalf("RequestTurn: could not retrieve keys, aborting.")
+	log.Fatalf("RequestRiver: could not retrieve keys, aborting.")
 }
 
 func (rr *RequestRiver) Respond(p *GokerPeer, sendingStream network.Stream) {

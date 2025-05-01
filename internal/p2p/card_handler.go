@@ -299,7 +299,7 @@ func (p *GokerPeer) DecryptFlop(cardOneKeys, cardTwoKeys, cardThreeKeys []string
 			return
 		}
 		p.Keyring.DecryptWithKey(p.Flop[0].CardValue, keyOne)
-		p.Flop[2].CardKeys = append(p.Flop[0].CardKeys, key)
+		p.Flop[0].CardKeys = append(p.Flop[0].CardKeys, key)
 	}
 
 	// Decrypt card two
@@ -314,7 +314,7 @@ func (p *GokerPeer) DecryptFlop(cardOneKeys, cardTwoKeys, cardThreeKeys []string
 			return
 		}
 		p.Keyring.DecryptWithKey(p.Flop[1].CardValue, keyTwo)
-		p.Flop[2].CardKeys = append(p.Flop[1].CardKeys, key)
+		p.Flop[1].CardKeys = append(p.Flop[1].CardKeys, key)
 	}
 
 	// Decrypt card three
@@ -446,6 +446,7 @@ func (p *GokerPeer) GetKeyPayloadForRiver() string {
 }
 
 func (p *GokerPeer) DecryptTurn(turnKeys []string) {
+	fmt.Printf("Decrypting Turn with %d keys\n", len(turnKeys))
 	for _, key := range turnKeys {
 		if p.gameState.Contains(p.Turn.CardKeys, key) {
 			continue
@@ -463,6 +464,7 @@ func (p *GokerPeer) DecryptTurn(turnKeys []string) {
 	if err != nil {
 		return
 	}
+	p.Turn.CardKeys = append(p.Turn.CardKeys, p.GetKeyPayloadForTurn())
 }
 
 func (p *GokerPeer) DecryptRiver(riverKeys []string) {
@@ -550,10 +552,48 @@ func (p *GokerPeer) GetKeyPayloadForMyHand() string {
 // Given a keyring payload, generated in variations.go, we can decrypt the round deck
 // (if a given key has yet to be used on that card)
 func (p *GokerPeer) DecryptRoundDeckWithPayload(payload string) {
+	fmt.Println("Decrypting Round deck with payload, as someone may have folded!")
 	pKeys := p.Keyring.GetKeysFromPayload(payload)
 
 	for i := range p.Deck.RoundDeck {
+		wasFlopCard := false
+		for j := range p.Flop {
+			if i == p.Flop[j].index {
+				wasFlopCard = true
+				if !p.gameState.Contains(p.Flop[j].CardKeys, pKeys[i].String()) {
+					fmt.Println("THIS SHOULD NOT BE CALLED")
+					p.Keyring.DecryptWithKey(p.Flop[j].CardValue, pKeys[i])
+					p.Flop[j].CardKeys = append(p.Flop[j].CardKeys, pKeys[i].String())
+					p.Deck.RoundDeck[i].CardKeys = append(p.Deck.RoundDeck[i].CardKeys, pKeys[i].String())
+				}
+				break
+			}
+		}
+		if wasFlopCard {
+			continue
+		}
+
+		if i == p.Turn.index {
+			if !p.gameState.Contains(p.Turn.CardKeys, pKeys[i].String()) {
+				p.Keyring.DecryptWithKey(p.Turn.CardValue, pKeys[i])
+				p.Turn.CardKeys = append(p.Turn.CardKeys, pKeys[i].String())
+			}
+			continue
+		}
+		if i == p.River.index {
+			if !p.gameState.Contains(p.River.CardKeys, pKeys[i].String()) {
+				p.Keyring.DecryptWithKey(p.River.CardValue, pKeys[i])
+				p.River.CardKeys = append(p.River.CardKeys, pKeys[i].String())
+			}
+			continue
+		}
+
+		// If it is not any of the playable cards, we can just attempt to decrypt it from the round deck
+		// As the cardvalue itself is a pointer, not the cardinfo struct holding it
 		if !p.gameState.Contains(p.Deck.RoundDeck[i].CardKeys, pKeys[i].String()) {
+			if i == p.Flop[0].index {
+				fmt.Println("Attempting to decrypt Flop 0 card from payload..")
+			}
 			p.Keyring.DecryptWithKey(p.Deck.RoundDeck[i].CardValue, pKeys[i])
 			p.Deck.RoundDeck[i].CardKeys = append(p.Deck.RoundDeck[i].CardKeys, pKeys[i].String())
 		}
