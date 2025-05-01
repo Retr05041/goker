@@ -178,6 +178,9 @@ func (gm *GameManager) RestartRound() {
 	for id := range gm.state.PlayedThisPhase {
 		gm.state.PlayedThisPhase[id] = false
 	}
+	for id := range gm.state.PhaseBets {
+		gm.state.PhaseBets[id] = 0.0
+	}
 
 	gm.state.MyBet = 0.0
 	gm.state.Phase = "preflop"
