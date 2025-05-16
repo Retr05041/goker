@@ -1,5 +1,5 @@
 # Goker
-(Mental Poker Protocol)[https://en.wikipedia.org/wiki/Mental_poker] with Time Locked Keys.
+[Mental Poker Protocol](https://en.wikipedia.org/wiki/Mental_poker) with Time Locked Keys.
 
 A program created for my final year dissertation.
 
