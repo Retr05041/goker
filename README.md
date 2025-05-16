@@ -4,7 +4,10 @@
 A program created for my final year dissertation.
 
 # What is it?
-Goker is a decentralized peer-to-peer poker client, implementing the Mental Poker Protocol to establish trust through cummutative encryption. Signing all commands with an RSA signature, and tags game commands to prevent core replay attacks.
+Goker is a decentralized peer-to-peer poker client, implementing the Mental Poker Protocol to establish trust through cummutative encryption. 
+
+- Signing all commands with an RSA signature, and tags game commands to prevent core replay attacks.
+- Time locked encryption of peers keyring is used to handle drop out failure
 
 # Setup and Run
 To build you will need the latest version of [Golang](https://go.dev/) installed.
