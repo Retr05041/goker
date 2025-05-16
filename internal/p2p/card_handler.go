@@ -561,7 +561,7 @@ func (p *GokerPeer) DecryptRoundDeckWithPayload(payload string) {
 			if i == p.Flop[j].index {
 				wasFlopCard = true
 				if !p.gameState.Contains(p.Flop[j].CardKeys, pKeys[i].String()) {
-					fmt.Println("THIS SHOULD NOT BE CALLED")
+					// fmt.Println("THIS SHOULD NOT BE CALLED")
 					p.Keyring.DecryptWithKey(p.Flop[j].CardValue, pKeys[i])
 					p.Flop[j].CardKeys = append(p.Flop[j].CardKeys, pKeys[i].String())
 					p.Deck.RoundDeck[i].CardKeys = append(p.Deck.RoundDeck[i].CardKeys, pKeys[i].String())
