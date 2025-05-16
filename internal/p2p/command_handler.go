@@ -147,6 +147,7 @@ func (p *GokerPeer) handleStream(stream network.Stream) {
 		channelmanager.TGUI_PlayerInfo <- p.gameState.GetPlayerInfo()
 		p.RespondToCommand(&InitTableCommand{}, stream) // Respond with DONE
 	case "SendPQ":
+		channelmanager.TGUI_ShowLoadingChan <- struct{}{}
 		pq := strings.Split(string(nCmd.Payload.(string)), "\n")
 		p.Keyring.SetPQ(pq[0], pq[1])
 		p.Keyring.GenerateKeys()
@@ -470,7 +471,6 @@ func (it *InitTableCommand) Respond(p *GokerPeer, sendingStream network.Stream) 
 ////////////////////////////////////////// KEYRING //////////////////////////////////////////////////////
 
 // Send P and Q to everyone for this rounds keyring
-// TODO: Find a better way to do this?
 type SendPQCommand struct{}
 
 func (pq *SendPQCommand) Execute(p *GokerPeer) {
@@ -1446,7 +1446,7 @@ func (rr *RequestRiver) Execute(p *GokerPeer) {
 		return
 	}
 
-	log.Fatalf("RequestTurn: could not retrieve keys, aborting.")
+	log.Fatalf("RequestRiver: could not retrieve keys, aborting.")
 }
 
 func (rr *RequestRiver) Respond(p *GokerPeer, sendingStream network.Stream) {
@@ -1599,7 +1599,7 @@ func (tlp *RequestPuzzleCommand) Execute(p *GokerPeer) {
 func (tlp *RequestPuzzleCommand) Respond(p *GokerPeer, sendingStream network.Stream) {
 	numOfPlayers := p.gameState.GetNumberOfPlayers()
 	numOfPhases := 4                                                            // Accounts for Preflop, Flop, Turn, and River
-	p.Keyring.GenerateTimeLockedPuzzle(int64(30*numOfPlayers*numOfPhases + 30)) // + 30 to account for threshold
+	p.Keyring.GenerateTimeLockedPuzzle(int64(15*numOfPlayers*numOfPhases + 30)) // + 30 to account for threshold
 
 	payload, err := json.Marshal(p.Keyring.TLP)
 	if err != nil {

@@ -44,21 +44,23 @@ func (p *GokerPeer) handleNotifications() {
 				p.gameState.SomeoneLeft = true
 			}
 
+			// Check if it's currently their turn
+			if p.gameState.TurnOrder[p.gameState.WhosTurn] == conn.RemotePeer() {
+				p.gameState.RemovePeerFromState(conn.RemotePeer())
+				p.gameState.NextTurn()
+			} else {
+				p.gameState.RemovePeerFromState(conn.RemotePeer())
+			}
+
 			// Update the peers list and nicknames
 			p.handlePeerDisconnection(conn.RemotePeer())
 
 			// Update the GUI
 			channelmanager.FNET_NumOfPlayersChan <- len(p.peerList)
 
-			// Remove the peer from the state
-			p.gameState.RemovePeerFromState(conn.RemotePeer())
-
 			// Update GUI of player leaving
 			channelmanager.TGUI_PlayerInfo <- p.gameState.GetPlayerInfo()
 
-			if p.gameState.TurnOrder[p.gameState.WhosTurn] == conn.RemotePeer() {
-				p.gameState.NextTurn()
-			}
 		},
 	})
 

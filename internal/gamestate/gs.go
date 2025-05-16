@@ -330,6 +330,7 @@ func (gs *GameState) PlayerCall(peerID peer.ID) {
 
 func (gs *GameState) PlayerFold(peerID peer.ID) {
 	gs.FoldedPlayers[peerID] = true
+	gs.PlayedThisPhase[peerID] = true
 }
 
 // Determines whos going and will check if the phases need to be switched
@@ -352,10 +353,21 @@ func (gs *GameState) NextTurn() {
 
 	// If someone left, ensure we properly handle ending the round at the right time
 	if gs.SomeoneLeft {
-		log.Println("Someone left, checking if we need to end the round...")
-		if nonFoldedCount == 1 {
+		// End round only if no non-folded players still need to act this phase
+		allNonFoldedPlayed := true
+		for id := range gs.Players {
+			if !gs.FoldedPlayers[id] && !gs.PlayedThisPhase[id] {
+				allNonFoldedPlayed = false
+				break
+			}
+		}
+
+		if allNonFoldedPlayed {
+			log.Println("All remaining players have acted. Ending round due to player leaving...")
 			gs.EndRound()
 			return
+		} else {
+			log.Println("There are still players who haven't acted. Continuing round...")
 		}
 	}
 
@@ -384,14 +396,25 @@ func (gs *GameState) NextTurn() {
 	// Modular arithmetic to wrap around
 	nextValidPlayer := (gs.WhosTurn + 1) % len(gs.Players)
 
-	for gs.FoldedPlayers[gs.TurnOrder[nextValidPlayer]] { // Skip all folded players
-		nextValidPlayer = (nextValidPlayer + 1) % len(gs.Players)
+	// Skip all players who folded (or possibly were marked as inactive/disconnected)
+	for !gs.isActivePlayer(gs.TurnOrder[nextValidPlayer]) {
+		nextValidPlayer = (nextValidPlayer + 1) % len(gs.TurnOrder)
+
+		if nextValidPlayer == gs.WhosTurn {
+			log.Println("No active players to take next turn.")
+			return
+		}
 	}
 
 	gs.WhosTurn = nextValidPlayer
 
 	channelmanager.TGUI_PotChan <- gs.GetCurrentPot()    // Updates the pot
 	channelmanager.TGUI_PlayerInfo <- gs.GetPlayerInfo() // Updates the cards
+}
+
+func (gs *GameState) isActivePlayer(playerID peer.ID) bool {
+	_, exists := gs.Players[playerID]
+	return exists && !gs.FoldedPlayers[playerID] && !gs.PlayedThisPhase[playerID]
 }
 
 func (gs *GameState) IsMyTurn() bool {

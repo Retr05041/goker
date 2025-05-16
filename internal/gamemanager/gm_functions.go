@@ -46,7 +46,7 @@ func (gm *GameManager) EvaluateHands() {
 
 	if gm.state.SomeoneLeft {
 		log.Println("Waiting for all necessary puzzles to be broken before evaluation...")
-		for gm.state.NumOfPuzzlesBroken < len(gm.state.Players)-1 {
+		for gm.state.NumOfPuzzlesBroken < len(gm.state.Players) {
 			<-channelmanager.TGM_WaitForPuzzles
 		}
 		log.Println("All puzzles decrypted, decrypting deck.")
@@ -157,7 +157,6 @@ func convertMyCardStringsToLibrarys(myCardStrings []string) []poker.Card {
 	return converted
 }
 
-// RestartRound will be called when a game is being played and the round is over.
 // Will distribute pot and reset phase bets and restart the protocol
 func (gm *GameManager) RestartRound() {
 	// Distribute the pot to the winner
@@ -178,6 +177,9 @@ func (gm *GameManager) RestartRound() {
 	}
 	for id := range gm.state.PlayedThisPhase {
 		gm.state.PlayedThisPhase[id] = false
+	}
+	for id := range gm.state.PhaseBets {
+		gm.state.PhaseBets[id] = 0.0
 	}
 
 	gm.state.MyBet = 0.0
@@ -202,6 +204,8 @@ func (gm *GameManager) RestartRound() {
 
 // Run through setting up keyring, shuffling deck, and dealing
 func (gm *GameManager) RunProtocol() {
+	channelmanager.TGUI_ShowLoadingChan <- struct{}{}
+
 	// Setup keyring for this round
 	gm.network.Keyring.GeneratePQ()
 	gm.network.Keyring.GenerateKeys()
@@ -222,6 +226,8 @@ func (gm *GameManager) RunProtocol() {
 	// Get Puzzle from everyone
 	gm.network.ExecuteCommand(&p2p.CanRequestPuzzle{})     // Tell everyone they can request their puzzle
 	gm.network.ExecuteCommand(&p2p.RequestPuzzleCommand{}) // Everyone sends each others timelocked payload to each other and they all begin to crack it
+
+	gm.network.ExecuteCommand(&p2p.MoveToTableCommand{}) // Tell everyone to move to the game table
 }
 
 func (gm *GameManager) DecryptBoardIfNeeded() {

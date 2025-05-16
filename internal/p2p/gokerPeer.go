@@ -57,10 +57,11 @@ func (p *GokerPeer) Init(nickname string, hosting bool, givenAddr string, givenS
 	// Setup deck and keyring for later
 	p.Keyring = new(sra.Keyring)
 	p.Keyring.GenerateSigningKeys()
+	p.Keyring.CalibrateSquaringSpeed()
 
 	p.Deck = new(deckInfo)
 	p.OthersHands = make(map[peer.ID][]*CardInfo)
-	// TODO: Make this decided at runtime?
+	// TODO: Make this decided at runtime? - Should do this more securely in the future
 	p.Deck.GenerateDecks("gokerdecksecretkeyforhashesversion1")
 
 	// Set the givenState
@@ -116,8 +117,7 @@ func (p *GokerPeer) SetTurnOrderWithLobby() {
 	p.gameState.SetTurnOrder(IDs)
 }
 
-// Unlocks the time-locked key by performing
-// `t` sequential squaring operations.
+// Unlocks the time-locked key by performing `t` sequential squaring operations.
 func (p *GokerPeer) BreakTimeLockedPuzzle(peerID peer.ID, puzzlePayload []byte) {
 	var message sra.TimeLock
 	if err := json.Unmarshal([]byte(puzzlePayload), &message); err != nil {
@@ -130,15 +130,15 @@ func (p *GokerPeer) BreakTimeLockedPuzzle(peerID peer.ID, puzzlePayload []byte) 
 	iterations, _ := new(big.Int).SetString(message.Iter, 10)
 	n, _ := new(big.Int).SetString(message.N, 10)
 
-	// Step 1: Set base
+	// Set base
 	base := big.NewInt(2)
 
-	// Step 2: Perform 't' squarings of 'base' modulo 'n'
+	// Perform 't' squarings of 'base' modulo 'n'
 	for i := big.NewInt(0); i.Cmp(iterations) < 0; i.Add(i, big.NewInt(1)) {
 		base.Exp(base, big.NewInt(2), n)
 	}
 
-	// Step 3: Subtract `b` from the time locked puzzle to retrieve the private key
+	// Subtract `b` from the time locked puzzle to retrieve the private key
 	key := new(big.Int).Sub(puzzle, base)
 	key.Mod(key, n)
 

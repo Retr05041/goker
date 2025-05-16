@@ -33,7 +33,7 @@ func showMenuUI(givenWindow fyne.Window) {
 		if nickname.Text != "" {
 			channelmanager.FGUI_ActionChan <- channelmanager.ActionType{Action: "hostOrConnectPressed", DataS: []string{nickname.Text}}
 			isHost = true
-			showHostUI(givenWindow)
+			showLoadingScreen(givenWindow)
 		}
 	})
 
@@ -41,7 +41,7 @@ func showMenuUI(givenWindow fyne.Window) {
 		if nickname.Text != "" {
 			if inputedAddress.Text != "" {
 				channelmanager.FGUI_ActionChan <- channelmanager.ActionType{Action: "hostOrConnectPressed", DataS: []string{nickname.Text, inputedAddress.Text}}
-				showConnectedUI(givenWindow)
+				showLoadingScreen(givenWindow)
 			}
 		}
 	})
@@ -101,4 +101,22 @@ func showGameScreen(givenWindow fyne.Window) {
 								container.NewHBox(raiseButton, valueLabel),
 								betSlider),
 							checkButton))))))
+}
+
+func showLoadingScreen(givenWindow fyne.Window) {
+	loadingText := canvas.NewText("Loading...", BLUE)
+	loadingText.TextSize = 24
+	loadingText.Alignment = fyne.TextAlignCenter
+
+	progressBar := widget.NewProgressBarInfinite()
+	progressBar.Start()
+
+	loadingContainer := container.NewCenter(
+		container.NewVBox(
+			container.NewCenter(loadingText),
+			container.NewCenter(progressBar),
+		),
+	)
+
+	setWindowContent(givenWindow, loadingContainer)
 }

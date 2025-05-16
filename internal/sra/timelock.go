@@ -44,21 +44,20 @@ func (k *Keyring) GenerateTimeLockedPuzzle(seconds int64) {
 	// Calculate φ(n) = (p-1)(q-1) - THIS WILL NEED TO BE KEPT
 	phi := new(big.Int).Mul(new(big.Int).Sub(p, big.NewInt(1)), new(big.Int).Sub(q, big.NewInt(1)))
 
-	// Step 1: Determine `t` based on desired decryption delay (T in seconds)
-	// Experimentally chosen squaring speed
-	squaringSpeed := k.CalibrateSquaringSpeed(n) // Adjust based on actual hardware speed
+	// Determine `t` based on desired decryption delay (T in seconds)
+	squaringSpeed := k.squaringSpeed
 	iterations := new(big.Int).Mul(big.NewInt(seconds), big.NewInt(squaringSpeed))
 
-	// Step 2: Calculate `e = 2^t mod φ(n)`
+	// Calculate `e = 2^t mod φ(n)`
 	e := new(big.Int).Exp(big.NewInt(2), iterations, phi)
 
 	// Initial base of 2
 	a := big.NewInt(2)
 
-	// Step 4: Compute `b = a^e mod n`
+	// Compute `b = a^e mod n`
 	b := new(big.Int).Exp(a, e, n)
 
-	// Step 5: Encrypt the global private key with `b`
+	// Encrypt the global private key with `b`
 	lockedPuzzle := new(big.Int).Add(key, b)
 	lockedPuzzle.Mod(lockedPuzzle, n)
 
@@ -69,7 +68,13 @@ func (k *Keyring) GenerateTimeLockedPuzzle(seconds int64) {
 	k.TLP.N = n.String()
 }
 
-func (k *Keyring) CalibrateSquaringSpeed(n *big.Int) int64 {
+func (k *Keyring) CalibrateSquaringSpeed() {
+	p, q, err := generateLargePrime(2048)
+	if err != nil {
+		fmt.Println(err)
+	}
+	n := new(big.Int).Mul(p, q)
+
 	// Set a large number of squarings to get an accurate measure.
 	const numSquarings = 1_000_000 // Adjust as needed for precision and timing.
 
@@ -92,7 +97,7 @@ func (k *Keyring) CalibrateSquaringSpeed(n *big.Int) int64 {
 	squaringSpeed := int64(float64(numSquarings) / elapsed)
 
 	fmt.Printf("Calibration complete: Estimated squaring speed is %d operations per second\n", squaringSpeed)
-	return squaringSpeed
+	k.squaringSpeed = squaringSpeed
 }
 
 // Encrypts plaintext with AES-256-GCM and returns the ciphertext in base64 format and key
